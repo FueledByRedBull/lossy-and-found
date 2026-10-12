@@ -124,7 +124,7 @@ fn content_class_matches_labelled_images() {
             count += 1;
         }
     }
-    assert_eq!(count, 6, "samples/photos should hold six photographs");
+    assert_eq!(count, 10, "samples/photos should hold ten photographs");
 
     let temp = tempfile::tempdir().unwrap();
     let synthetic = |name: &str, pixel: fn(u32, u32) -> [u8; 3]| {

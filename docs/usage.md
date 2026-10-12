@@ -402,6 +402,9 @@ animation. The dimensions of the image are never changed.
 The content classifier labels each image `photo`, `screenshot`,
 `transparent-asset`, `simple-graphic` or `unknown` in the report (shown as
 `Photo`, `Screenshot` and so on in the text report).
+The label comes from colour, edge and flat-area statistics of a 512 px overview
+and only names the image in the report; it does not change the search. A
+sharply textured greyscale photograph can be labelled `screenshot`.
 
 ## How the search works
 
@@ -846,7 +849,7 @@ know what changes:
   is written and the exit status stays 0. Lower the preset (`--preset
   aggressive`), allow more formats (`--target smallest`), or accept that the file
   is already well compressed. The strict preset finds no smaller file for any of
-  the six sample photos.
+  the six larger sample photos.
 - **"output already exists, left as it is":** the image was skipped; pass
   `--overwrite` or another `--out-dir`.
 - **An image is refused for its size:** raise `--max-pixels` or the other limits,

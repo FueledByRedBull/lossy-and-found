@@ -46,7 +46,7 @@ For batch smoke gates, use at least 30 tiny images and 10 normal images: the pro
 
 ## Synthetic corpus
 
-`cargo run --release --bin smart-compress-benchmark -- --generate-corpus target/corpus` writes a deterministic synthetic corpus and a `corpus.json` manifest. Classes: photo-like, screenshot-like, UI text, flat icon, gradient, noise, soft-alpha transparency, alpha fringe, 1 px checkerboard, one-pixel lines, small text, a JPEG with EXIF orientation 6, PNGs with embedded sRGB and Display P3 ICC profiles, and a CMYK JPEG. Every image is procedurally generated; none is a real photograph or screenshot, so use real photos as well (`samples/photos/` has six) before drawing conclusions about photographic content. The default size classes are `tiny` (16 to 64 px), `512` and `2048`. `--corpus-sizes tiny,512,2048,12mp,50mp,199mp` adds the large classes (photo and screenshot only; the 199.8 MP PNG needs about 1 GB of RAM to generate). The manifest records each file's path, content class, size class, dimensions, format, byte length, BLAKE3 hash and provenance (generator, generator version, seed). Equal options always produce byte-identical files; `--corpus-seed` changes the content. Benchmark it with `cargo run --release --bin smart-compress-benchmark -- target/corpus --runs 3 --out target/benchmark-results.json`; directory inputs are searched recursively.
+`cargo run --release --bin smart-compress-benchmark -- --generate-corpus target/corpus` writes a deterministic synthetic corpus and a `corpus.json` manifest. Classes: photo-like, screenshot-like, UI text, flat icon, gradient, noise, soft-alpha transparency, alpha fringe, 1 px checkerboard, one-pixel lines, small text, a JPEG with EXIF orientation 6, PNGs with embedded sRGB and Display P3 ICC profiles, and a CMYK JPEG. Every image is procedurally generated; none is a real photograph or screenshot, so use real photos as well (`samples/photos/` has ten) before drawing conclusions about photographic content. The default size classes are `tiny` (16 to 64 px), `512` and `2048`. `--corpus-sizes tiny,512,2048,12mp,50mp,199mp` adds the large classes (photo and screenshot only; the 199.8 MP PNG needs about 1 GB of RAM to generate). The manifest records each file's path, content class, size class, dimensions, format, byte length, BLAKE3 hash and provenance (generator, generator version, seed). Equal options always produce byte-identical files; `--corpus-seed` changes the content. Benchmark it with `cargo run --release --bin smart-compress-benchmark -- target/corpus --runs 3 --out target/benchmark-results.json`; directory inputs are searched recursively.
 
 ## Harness options
 
@@ -103,7 +103,7 @@ Peak resident memory of the harness process was 0.5 GB for the small corpus, 2.2
 
 ## Search comparison: two-pass search and PAM decoding
 
-Before and after the two-pass search and PAM decoding, default metric, target `smallest`, balanced, pinned to 7 cores. Photos are the stock images in `samples/photos/`.
+Before and after the two-pass search and PAM decoding, default metric, target `smallest`, balanced, pinned to 7 cores. Photos are the six larger stock images in `samples/photos/` (2000 px and more on the long side).
 
 | Image | Before: time, candidates, winner | After: time, candidates, winner |
 |---|---|---|
@@ -218,7 +218,7 @@ The batch runs of one build ranged from 193 s to 242 s, so the 7% is inside the 
 
 ## Six sample photos
 
-Balanced preset, SSIMULACRA2 deciding (floor 80), `--target smallest`, default formats, `--workers 6`, pinned to six cores, with libjxl 0.11.2, libavif 1.4.2, libwebp 1.6.0 and `oxipng` 10.1.1. Sizes in bytes.
+Balanced preset, SSIMULACRA2 deciding (floor 80), `--target smallest`, default formats, `--workers 6`, pinned to six cores, with libjxl 0.11.2, libavif 1.4.2, libwebp 1.6.0 and `oxipng` 10.1.1. Sizes in bytes. "The six photos" in this document are the ones of 2000 px and more on the long side; the four smaller low-detail photos in the folder exist for the content classifier and are not part of these measurements.
 
 | Photo | Original | Winner | Size | Score | Smaller by |
 |---|---:|---|---:|---:|---:|
@@ -248,7 +248,7 @@ The batch took 121 s of wall time. It is not comparable with the 142 s at seven 
 Install the encoders (`tools/fetch-tools.ps1`) and build first (`cargo build --release --bins`). Pinning keeps runs comparable: from `cmd`, `start /B /WAIT /AFFINITY 3F <exe> <args>` restricts a command and its children to six logical cores (from Git Bash, pass that whole string to `cmd //C`). Match `--workers` to the number of cores you pin to.
 
 ```powershell
-# Six sample photos (the table above): output files and a JSON report
+# All sample photos (the table above lists the six larger ones): output files and a JSON report
 target\release\smart-compress.exe samples\photos --recursive --target smallest --workers 6 --no-progress --out-dir target\photos-out --report json --report-out target\photos-report.json
 
 # Synthetic corpus, then the end-to-end harness over it

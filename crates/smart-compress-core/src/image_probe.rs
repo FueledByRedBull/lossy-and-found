@@ -795,14 +795,18 @@ fn analyze_overview(overview: &RgbaImage, has_alpha: bool) -> Analysis {
 const MIN_CLASSIFIED_PIXELS: u64 = 128 * 128;
 
 /// Thresholds come from the 512 px overview features of the labelled set
-/// (generated corpus, tests/fixtures, six samples/photos photographs):
+/// (generated corpus, tests/fixtures, ten samples/photos photographs):
 /// - `unique_color_ratio` of palette graphics (flat icons, screenshots, text,
-///   lines) is at most 0.005 at 512 px and above; the six photographs span
-///   0.0099 to 0.067. 0.007 sits between them.
-/// - `edge_density` of flat graphics and colour bars is at most 0.017 and of text
-///   or screenshots at least 0.2; 0.1 splits them.
-/// - `flat_region_ratio` of the photographs is at most 0.845, smooth gradients
-///   and ramps are 0.99. Above 0.95 the content is too smooth to call a photo.
+///   lines) is at most 0.005 at 512 px and above; the colour photographs span
+///   0.0099 to 0.067, and 0.007 sits between them. Greyscale and foggy
+///   photographs fall below it too (0.0007 to 0.0018; a grey image has at most
+///   32 quantised levels), so below 0.007 the next two features decide.
+/// - `edge_density` of text, lines and screenshots is at least 0.2 and of the
+///   sharpest photograph 0.145; 0.175 splits them. A greyscale photograph
+///   sharper than that would be called a screenshot.
+/// - `flat_region_ratio` of the photographs is at most 0.946, flat graphics are
+///   at least 0.969, smooth gradients and ramps are 0.99. At 0.95 and above the
+///   content is too smooth to call a photo.
 fn classify(analysis: &Analysis, has_alpha: bool, pixels: u64) -> ContentClass {
     if has_alpha {
         return ContentClass::TransparentAsset;
@@ -810,17 +814,20 @@ fn classify(analysis: &Analysis, has_alpha: bool, pixels: u64) -> ContentClass {
     if pixels < MIN_CLASSIFIED_PIXELS {
         return ContentClass::Unknown;
     }
+    let smooth = analysis.flat_region_ratio >= 0.95;
     if analysis.unique_color_ratio < 0.007 {
-        return if analysis.edge_density > 0.1 {
-            ContentClass::Screenshot
-        } else {
-            ContentClass::SimpleGraphic
-        };
+        if analysis.edge_density > 0.175 {
+            return ContentClass::Screenshot;
+        }
+        if smooth {
+            return ContentClass::SimpleGraphic;
+        }
     }
-    if analysis.flat_region_ratio < 0.95 {
-        return ContentClass::Photo;
+    if smooth {
+        ContentClass::Unknown
+    } else {
+        ContentClass::Photo
     }
-    ContentClass::Unknown
 }
 
 fn luma<P: Pixel<Subpixel = u8>>(pixel: &P) -> u8 {

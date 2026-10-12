@@ -125,7 +125,7 @@ Qualities above or below an already-tested point are skipped as "assumed to pass
 instead of being encoded, and candidates that cannot beat the best so far are
 skipped as "cannot win". The report gives the reason for each.
 
-**Measured result.** On the six stock photos in `samples/photos/` (7,593,517 bytes
+**Measured result.** On the six larger stock photos in `samples/photos/` (7,593,517 bytes
 together), the balanced preset (SSIMULACRA2 floor 80) with `--target smallest`
 produces 5,940,628 bytes, 21.8% smaller. Individual photos range from 14% to 44%
 smaller. These photos were already lossy JPEGs, which limits the gain; the strict
