@@ -54,8 +54,9 @@ reason that is measured:
 
 ### Code
 
-- Split `pipeline.rs` and `scoring.rs` in `smart-compress-core` into modules;
-  each is several thousand lines.
+- Split `scoring.rs` in `smart-compress-core` and `lib.rs` in
+  `smart-compress-codecs` into modules, as was done for the pipeline; each is
+  over two thousand lines.
 - Add a keyed check to the score cache. Cached files are verified by hash, but
   someone who can write to the cache folder and recompute hashes could alter a
   stored score.
