@@ -1,0 +1,35 @@
+name: gpu-large-validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gpu-large:
+    # A GitHub-hosted runner has neither a GPU nor the large test image, so a
+    # run there would validate nothing. The runner must provide both: a GPU
+    # adapter, and an image of about 200 MP at the path in
+    # SMART_COMPRESS_LARGE_IMAGE, set in the runner environment (the image is
+    # not in the repository, and checkout cleans untracked files from the
+    # workspace).
+    runs-on: [self-hosted, windows, gpu]
+    env:
+      SMART_COMPRESS_REQUIRE_GPU: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Fetch encoders
+        shell: pwsh
+        run: ./tools/fetch-tools.ps1
+      - name: Run dedicated prepared-GPU parity test
+        run: cargo test -p smart-compress-core --test fixture_corpus gpu_prepared_scores_match_known_large_image -- --ignored --nocapture
+      - name: Save validation report metadata
+        if: always()
+        run: cargo run --release --bin smart-compress-benchmark -- tests/fixtures --runs 1 --prepared-gpu --out target/gpu-benchmark.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gpu-large-validation
+          path: target/gpu-benchmark.json

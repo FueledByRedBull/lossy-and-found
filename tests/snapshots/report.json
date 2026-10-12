@@ -1,0 +1,746 @@
+{
+  "schema_version": 6,
+  "metric_color_space": "srgb-relative-v1",
+  "tools": {
+    "cwebp": {
+      "name": "cwebp",
+      "version": "cwebp 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "webpmux": {
+      "name": "webpmux",
+      "version": "webpmux 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "avifenc": {
+      "name": "avifenc",
+      "version": "avifenc 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "avifdec": {
+      "name": "avifdec",
+      "version": "avifdec 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "cjxl": {
+      "name": "cjxl",
+      "version": null,
+      "enabled": false,
+      "install_hint": "Install cjxl to enable this format."
+    },
+    "djxl": {
+      "name": "djxl",
+      "version": null,
+      "enabled": false,
+      "install_hint": "Install djxl to enable this format."
+    },
+    "oxipng": {
+      "name": "oxipng",
+      "version": "oxipng 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "pngquant": {
+      "name": "pngquant",
+      "version": "pngquant 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "cjpegli": {
+      "name": "cjpegli",
+      "version": "cjpegli 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "cjpeg": {
+      "name": "cjpeg",
+      "version": null,
+      "enabled": false,
+      "install_hint": "Install cjpeg to enable this format."
+    },
+    "ssimulacra2": {
+      "name": "ssimulacra2",
+      "version": "ssimulacra2 1.0",
+      "enabled": true,
+      "install_hint": null
+    },
+    "butteraugli": {
+      "name": "butteraugli_main",
+      "version": "butteraugli_main 1.0",
+      "enabled": true,
+      "install_hint": null
+    }
+  },
+  "gpu": {
+    "status": "enabled",
+    "requested_backend": "wgpu",
+    "requested_adapter_name": null,
+    "requested_adapter_vendor": null,
+    "requested_adapter_device": null,
+    "selected_adapter": {
+      "name": "Example GPU",
+      "vendor": 4318,
+      "device": 9479,
+      "device_type": "DiscreteGpu",
+      "backend": "Vulkan",
+      "max_texture_dimension_2d": 16384,
+      "max_buffer_size": 2147483648,
+      "max_storage_buffer_binding_size": 2147483648,
+      "timestamp_queries": true
+    },
+    "available_adapters": [
+      {
+        "name": "Example GPU",
+        "vendor": 4318,
+        "device": 9479,
+        "device_type": "DiscreteGpu",
+        "backend": "Vulkan",
+        "max_texture_dimension_2d": 16384,
+        "max_buffer_size": 2147483648,
+        "max_storage_buffer_binding_size": 2147483648,
+        "timestamp_queries": true
+      }
+    ],
+    "warnings": []
+  },
+  "reports": [
+    {
+      "input": "photos/harbour.jpg",
+      "input_identity": "0000000000000000000000000000000000000000000000000000000000000000",
+      "output": "optimized/harbour.avif",
+      "original_size": 1000000,
+      "saved_bytes": 690000,
+      "probe": {
+        "path": "photos/harbour.jpg",
+        "format": "Jpeg",
+        "width": 3000,
+        "height": 2000,
+        "pixels": 6000000,
+        "color_type": "Rgb8",
+        "original_color_type": "Rgb8",
+        "has_alpha": false,
+        "metadata_size": 3144,
+        "icc_profile_size": 3144,
+        "unique_color_ratio": 0.42,
+        "edge_density": 0.11,
+        "flat_region_ratio": 0.3,
+        "alpha_coverage": 0.0,
+        "orientation_applied": true,
+        "content_class": "photo"
+      },
+      "gpu_work": null,
+      "gpu_preprocess_backend": null,
+      "compute_backend": "gpu-wgpu",
+      "scoring_version": "score-snapshot",
+      "quality_metric": "ssimulacra2",
+      "min_quality": 80.0,
+      "timings": {
+        "source_open_ms": 2,
+        "source_decode_ms": 40,
+        "gpu_preprocess_ms": null,
+        "orientation_ms": 12,
+        "probe_ms": 8,
+        "normalize_ms": 55,
+        "cache_lookup_ms": 1,
+        "external_metric_prepare_ms": 30,
+        "search_ms": 9000,
+        "output_write_ms": 4,
+        "total_ms": 9152,
+        "backpressure_wait_ms": 310
+      },
+      "candidates": [
+        {
+          "codec": "jpeg",
+          "settings": {
+            "Quality": {
+              "quality": 78,
+              "effort": 0
+            }
+          },
+          "path": null,
+          "size_bytes": 365000,
+          "encode_ms": 120,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 400,
+          "quality": {
+            "rgb": 85.4,
+            "ssimulacra2": 81.4,
+            "butteraugli": null,
+            "alpha": null,
+            "composite_min": null,
+            "alpha_edge": null,
+            "edge": 75.4,
+            "overall": 81.4
+          },
+          "backend": "cjpegli",
+          "score_backend": {
+            "cpu-fallback": {
+              "reason": "GPU metric scoring failed: device lost"
+            }
+          },
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "first-passing",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": "Accepted",
+          "warnings": [
+            "CPU scoring fallback: GPU metric scoring failed: device lost"
+          ]
+        },
+        {
+          "codec": "jpeg",
+          "settings": {
+            "Quality": {
+              "quality": 92,
+              "effort": 0
+            }
+          },
+          "path": null,
+          "size_bytes": 890000,
+          "encode_ms": 120,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 400,
+          "quality": null,
+          "backend": "cjpegli",
+          "score_backend": null,
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "skipped",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": {
+            "Skipped": "dominated by current accepted candidate"
+          },
+          "warnings": []
+        },
+        {
+          "codec": "webp",
+          "settings": {
+            "Quality": {
+              "quality": 60,
+              "effort": 4
+            }
+          },
+          "path": null,
+          "size_bytes": 240000,
+          "encode_ms": 120,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 400,
+          "quality": {
+            "rgb": 78.2,
+            "ssimulacra2": 74.2,
+            "butteraugli": null,
+            "alpha": null,
+            "composite_min": null,
+            "alpha_edge": null,
+            "edge": 68.2,
+            "overall": 74.2
+          },
+          "backend": "cwebp",
+          "score_backend": "gpu",
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "rejected",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": {
+            "Rejected": "quality 74.2 below 80.0"
+          },
+          "warnings": []
+        },
+        {
+          "codec": "webp",
+          "settings": {
+            "Quality": {
+              "quality": 78,
+              "effort": 4
+            }
+          },
+          "path": null,
+          "size_bytes": 420000,
+          "encode_ms": 0,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": 3,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 3,
+          "quality": {
+            "rgb": 87.1,
+            "ssimulacra2": 83.1,
+            "butteraugli": null,
+            "alpha": null,
+            "composite_min": null,
+            "alpha_edge": null,
+            "edge": 77.1,
+            "overall": 83.1
+          },
+          "backend": "cache",
+          "score_backend": null,
+          "quality_source": "score-cache",
+          "cache_hit_kind": "score-metadata",
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "skipped",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": "Accepted",
+          "warnings": []
+        },
+        {
+          "codec": "avif",
+          "settings": "Lossless",
+          "path": null,
+          "size_bytes": null,
+          "encode_ms": null,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 120050,
+          "quality": null,
+          "backend": null,
+          "score_backend": null,
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": {
+            "executable": "tools/avifenc.exe",
+            "kind": "Timeout",
+            "exit_code": null,
+            "message": "terminated",
+            "elapsed_ms": 120000,
+            "termination_requested": true
+          },
+          "gpu_verification": null,
+          "influence": "failed",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": {
+            "Failed": "tools/avifenc.exe Timeout after 120000 ms: terminated"
+          },
+          "warnings": []
+        },
+        {
+          "codec": "avif",
+          "settings": {
+            "Quality": {
+              "quality": 72,
+              "effort": 6
+            }
+          },
+          "path": null,
+          "size_bytes": 310000,
+          "encode_ms": 120,
+          "decode_ms": 90,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": 210,
+          "cache_ms": null,
+          "external_metric_ms": 200,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": 1250000,
+          "total_ms": 400,
+          "quality": {
+            "rgb": 84.6,
+            "ssimulacra2": 80.6,
+            "butteraugli": null,
+            "alpha": null,
+            "composite_min": null,
+            "alpha_edge": null,
+            "edge": 74.6,
+            "overall": 80.6
+          },
+          "backend": "avifenc",
+          "score_backend": "gpu",
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "improved-winner",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": "Accepted",
+          "warnings": []
+        },
+        {
+          "codec": "png",
+          "settings": "Lossless",
+          "path": null,
+          "size_bytes": 4800000,
+          "encode_ms": 60,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 60,
+          "quality": null,
+          "backend": "native-png+optional-oxipng",
+          "score_backend": null,
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "rejected",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": {
+            "Rejected": "not smaller than original"
+          },
+          "warnings": []
+        }
+      ],
+      "winner_index": 5,
+      "outcome": "optimized",
+      "errors": [],
+      "warnings": [
+        "embedded ICC profile dropped: it describes GRAY data but the image decodes to RGB"
+      ],
+      "dry_run": false,
+      "search_stop_reason": "candidate attempt budget of 7 reached",
+      "temporary_bytes_current": 0,
+      "temporary_bytes_peak": 7105000,
+      "temporary_budget_bytes": null
+    },
+    {
+      "input": "photos/receipt.jpg",
+      "input_identity": "0000000000000000000000000000000000000000000000000000000000000000",
+      "output": null,
+      "original_size": 48000,
+      "saved_bytes": null,
+      "probe": {
+        "path": "photos/receipt.jpg",
+        "format": "Jpeg",
+        "width": 3000,
+        "height": 2000,
+        "pixels": 6000000,
+        "color_type": "Rgb8",
+        "original_color_type": "Rgb8",
+        "has_alpha": false,
+        "metadata_size": 3144,
+        "icc_profile_size": 3144,
+        "unique_color_ratio": 0.42,
+        "edge_density": 0.11,
+        "flat_region_ratio": 0.3,
+        "alpha_coverage": 0.0,
+        "orientation_applied": true,
+        "content_class": "photo"
+      },
+      "gpu_work": null,
+      "gpu_preprocess_backend": null,
+      "compute_backend": "gpu-wgpu",
+      "scoring_version": "score-snapshot",
+      "quality_metric": "ssimulacra2",
+      "min_quality": 80.0,
+      "timings": {
+        "source_open_ms": 2,
+        "source_decode_ms": 40,
+        "gpu_preprocess_ms": null,
+        "orientation_ms": 12,
+        "probe_ms": 8,
+        "normalize_ms": 55,
+        "cache_lookup_ms": 1,
+        "external_metric_prepare_ms": 30,
+        "search_ms": 9000,
+        "output_write_ms": 4,
+        "total_ms": 9152,
+        "backpressure_wait_ms": 310
+      },
+      "candidates": [
+        {
+          "codec": "jpeg",
+          "settings": {
+            "Quality": {
+              "quality": 92,
+              "effort": 0
+            }
+          },
+          "path": null,
+          "size_bytes": 31000,
+          "encode_ms": 120,
+          "decode_ms": null,
+          "decode_process_ms": null,
+          "decode_io_ms": null,
+          "preprocess_ms": null,
+          "score_ms": null,
+          "cache_ms": null,
+          "external_metric_ms": null,
+          "gpu_upload_ms": null,
+          "gpu_transform_ms": null,
+          "gpu_compute_ms": null,
+          "gpu_readback_ms": null,
+          "gpu_timestamp_ns": null,
+          "total_ms": 400,
+          "quality": {
+            "rgb": 81.9,
+            "ssimulacra2": 77.9,
+            "butteraugli": null,
+            "alpha": null,
+            "composite_min": null,
+            "alpha_edge": null,
+            "edge": 71.9,
+            "overall": 77.9
+          },
+          "backend": "cjpegli",
+          "score_backend": "cpu",
+          "quality_source": "fresh",
+          "cache_hit_kind": null,
+          "process_failure": null,
+          "gpu_verification": null,
+          "influence": "rejected",
+          "bytes": {
+            "source_upload_bytes": null,
+            "candidate_upload_bytes": null,
+            "temporary_output_bytes": null,
+            "decoded_buffer_bytes": null,
+            "peak_estimated_memory_bytes": null
+          },
+          "status": {
+            "Rejected": "quality 77.9 below 80.0"
+          },
+          "warnings": []
+        }
+      ],
+      "winner_index": null,
+      "outcome": "kept",
+      "errors": [],
+      "warnings": [
+        "nothing scored at least 80.0 while staying smaller than the original; the original is left as it is"
+      ],
+      "dry_run": false,
+      "search_stop_reason": null,
+      "temporary_bytes_current": 0,
+      "temporary_bytes_peak": 0,
+      "temporary_budget_bytes": null
+    },
+    {
+      "input": "photos/harbour-2.jpg",
+      "input_identity": "0000000000000000000000000000000000000000000000000000000000000000",
+      "output": null,
+      "original_size": 1000000,
+      "saved_bytes": null,
+      "probe": {
+        "path": "photos/harbour-2.jpg",
+        "format": "Jpeg",
+        "width": 3000,
+        "height": 2000,
+        "pixels": 6000000,
+        "color_type": "Rgb8",
+        "original_color_type": "Rgb8",
+        "has_alpha": false,
+        "metadata_size": 3144,
+        "icc_profile_size": 3144,
+        "unique_color_ratio": 0.42,
+        "edge_density": 0.11,
+        "flat_region_ratio": 0.3,
+        "alpha_coverage": 0.0,
+        "orientation_applied": true,
+        "content_class": "photo"
+      },
+      "gpu_work": null,
+      "gpu_preprocess_backend": null,
+      "compute_backend": "gpu-wgpu",
+      "scoring_version": "score-snapshot",
+      "quality_metric": "ssimulacra2",
+      "min_quality": 80.0,
+      "timings": {
+        "source_open_ms": 2,
+        "source_decode_ms": 40,
+        "gpu_preprocess_ms": null,
+        "orientation_ms": 12,
+        "probe_ms": 8,
+        "normalize_ms": 55,
+        "cache_lookup_ms": 1,
+        "external_metric_prepare_ms": 30,
+        "search_ms": 9000,
+        "output_write_ms": 4,
+        "total_ms": 9152,
+        "backpressure_wait_ms": 310
+      },
+      "candidates": [],
+      "winner_index": null,
+      "outcome": "skipped",
+      "errors": [],
+      "warnings": [
+        "output already exists, left as it is: optimized/harbour-2.avif (pass --overwrite to replace it)"
+      ],
+      "dry_run": false,
+      "search_stop_reason": null,
+      "temporary_bytes_current": 0,
+      "temporary_bytes_peak": 0,
+      "temporary_budget_bytes": null
+    },
+    {
+      "input": "photos/broken.jpg",
+      "input_identity": "0000000000000000000000000000000000000000000000000000000000000000",
+      "output": null,
+      "original_size": 1000000,
+      "saved_bytes": null,
+      "probe": null,
+      "gpu_work": null,
+      "gpu_preprocess_backend": null,
+      "compute_backend": "gpu-wgpu",
+      "scoring_version": "score-snapshot",
+      "quality_metric": "ssimulacra2",
+      "min_quality": 80.0,
+      "timings": {
+        "source_open_ms": 2,
+        "source_decode_ms": 40,
+        "gpu_preprocess_ms": null,
+        "orientation_ms": 12,
+        "probe_ms": 8,
+        "normalize_ms": 55,
+        "cache_lookup_ms": 1,
+        "external_metric_prepare_ms": 30,
+        "search_ms": 9000,
+        "output_write_ms": 4,
+        "total_ms": 9152,
+        "backpressure_wait_ms": 310
+      },
+      "candidates": [],
+      "winner_index": null,
+      "outcome": "failed",
+      "errors": [
+        "decoding photos/broken.jpg: the image format could not be determined"
+      ],
+      "warnings": [],
+      "dry_run": false,
+      "search_stop_reason": null,
+      "temporary_bytes_current": 0,
+      "temporary_bytes_peak": 0,
+      "temporary_budget_bytes": null
+    }
+  ],
+  "failures": 1,
+  "warnings": [
+    "could not read part of photos/private: Access is denied."
+  ],
+  "stage_totals": {
+    "source_decode_ms": 160,
+    "normalize_ms": 220,
+    "search_ms": 36000,
+    "encode_ms": 660,
+    "candidate_decode_ms": 90,
+    "score_ms": 210,
+    "cache_ms": 3,
+    "external_metric_ms": 200,
+    "output_write_ms": 16,
+    "total_ms": 36608,
+    "gpu_timestamp_ns": 1250000
+  },
+  "manifest": {
+    "run_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "status": "complete",
+    "started_unix_ms": 1791000000000,
+    "completed_unix_ms": 1791000009500,
+    "expected_inputs": 4,
+    "completed_inputs": 4,
+    "config_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "resume_decision": null
+  }
+}

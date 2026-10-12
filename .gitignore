@@ -1,0 +1,43 @@
+# Build output
+/target/
+
+# Candidate cache (the default cache lives outside the repository)
+.smart-compress-cache/
+
+# Third-party programs: tools/fetch-tools.ps1 installs them into tools/, so
+# everything there is ignored (including a tools/downloads/ folder of old
+# archives) except the scripts and the process-tree measuring tool.
+/tools/*
+!/tools/fetch-tools.ps1
+!/tools/package-release.ps1
+!/tools/measure-process-tree.rs
+
+# The shortcut holds an absolute path for one machine; gui.cmd is the portable launcher
+/Smart Compress.lnk
+
+# Images are ignored everywhere, so that a personal photo dropped anywhere in
+# the tree cannot be committed by accident. The test fixtures and the sample
+# photos below are the only tracked images.
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.avif
+*.jxl
+*.heic
+*.tif
+*.tiff
+*.bmp
+*.gif
+!/tests/fixtures/*
+!/samples/photos/*
+
+# The default output folder of the program, wherever it was run. It comes
+# after the exceptions above so that it also holds inside them.
+optimized/
+
+# Local folders of the maintainer
+/images/
+/optimized-test/
+/optimized-orientation-test/
+/runs/

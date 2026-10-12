@@ -1,0 +1,25 @@
+[package]
+name = "smart-compress"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "smart-compress"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+clap.workspace = true
+indicatif.workspace = true
+serde_json.workspace = true
+smart-compress-codecs = { path = "../smart-compress-codecs" }
+smart-compress-core = { path = "../smart-compress-core" }

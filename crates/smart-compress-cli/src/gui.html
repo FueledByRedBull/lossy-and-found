@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smart-compress</title>
+<style nonce="{{nonce}}">
+:root {
+  color-scheme: dark;
+  --bg: oklch(0.19 0.008 250);
+  --surface: oklch(0.23 0.009 250);
+  --raised: oklch(0.275 0.01 250);
+  --line: oklch(0.34 0.012 250);
+  --text: oklch(0.95 0.005 250);
+  --muted: oklch(0.74 0.012 250);
+  --accent: oklch(0.83 0.17 148);
+  --accent-ink: oklch(0.2 0.05 148);
+  --accent-soft: oklch(0.83 0.17 148 / 0.14);
+  --danger: oklch(0.74 0.16 25);
+  --warn: oklch(0.83 0.13 85);
+  --shadow: 0 1px 2px oklch(0 0 0 / 0.3), 0 8px 24px -8px oklch(0 0 0 / 0.5);
+  --radius: 8px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: oklch(0.965 0.004 250);
+    --surface: oklch(0.995 0.002 250);
+    --raised: oklch(0.945 0.005 250);
+    --line: oklch(0.87 0.008 250);
+    --text: oklch(0.24 0.012 250);
+    --muted: oklch(0.47 0.014 250);
+    --accent: oklch(0.5 0.15 150);
+    --accent-ink: oklch(0.99 0.01 150);
+    --accent-soft: oklch(0.5 0.15 150 / 0.11);
+    --danger: oklch(0.5 0.19 27);
+    --warn: oklch(0.5 0.12 75);
+    --shadow: 0 1px 2px oklch(0.3 0.02 250 / 0.08), 0 8px 24px -10px oklch(0.3 0.02 250 / 0.22);
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scrollbar-color: var(--line) transparent; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums; accent-color: var(--accent); caret-color: var(--accent);
+}
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+h2 { font-size: 20px; font-weight: 620; letter-spacing: -0.015em; text-wrap: balance; }
+h3 { font-size: 13px; font-weight: 620; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.shell { display: grid; grid-template-columns: minmax(0, 1fr) 392px; min-height: 100vh; }
+main { padding: 20px 28px 120px; min-width: 0; }
+aside { border-left: 1px solid var(--line); background: var(--surface); height: 100vh; position: sticky; top: 0; overflow-y: auto; }
+header.top { display: flex; align-items: baseline; gap: 4px 12px; margin-bottom: 22px; flex-wrap: wrap; }
+#env { overflow-wrap: anywhere; }
+header.top .muted { margin-left: auto; }
+
+button, .btn {
+  font: inherit; color: var(--text); background: var(--raised); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s var(--ease);
+}
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 620; padding: 9px 18px; }
+button.primary:hover:not(:disabled) { filter: brightness(1.07); }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 5px 7px; }
+button.ghost:hover:not(:disabled) { color: var(--text); background: var(--raised); }
+button.danger { color: var(--danger); }
+
+input[type=text], input[type=number], select {
+  font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 9px; width: 100%; min-width: 0;
+}
+input::placeholder { color: var(--muted); opacity: 0.85; }
+input[type=color] { width: 38px; height: 32px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+
+.section-head { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; flex-wrap: wrap; }
+.section-head .spacer { flex: 1; }
+.block { margin-bottom: 30px; }
+
+main.dragging { outline: 2px dashed var(--accent); outline-offset: -10px; }
+.empty { border: 1px dashed var(--line); border-radius: var(--radius); padding: 34px 24px; text-align: center; }
+.empty p { max-width: 46ch; margin: 6px auto 16px; color: var(--muted); }
+.empty .row { justify-content: center; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.addpath { display: flex; gap: 8px; margin-top: 10px; }
+
+ul.list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+ul.list > li + li { border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 12px; }
+.thumb { width: 48px; height: 48px; border-radius: 5px; background: var(--raised); object-fit: cover; display: grid; place-items: center; color: var(--muted); overflow: hidden; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.name { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.bad { color: var(--danger); }
+.warn { color: var(--warn); }
+
+details.result > summary { list-style: none; cursor: pointer; }
+details.result > summary::-webkit-details-marker { display: none; }
+.result .item { grid-template-columns: 48px minmax(0, 1.2fr) minmax(150px, 1fr) auto; }
+.saving { display: grid; gap: 5px; }
+.saving .figures { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.saving strong { font-size: 15px; font-weight: 650; }
+.meter { height: 5px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.meter > i { display: block; height: 100%; width: var(--w, 0%); background: var(--accent); border-radius: 3px; transform-origin: left; animation: grow 0.9s var(--ease) both; animation-delay: var(--d, 0s); }
+@keyframes grow { from { transform: scaleX(0); } }
+.badge { font-size: 12px; font-weight: 620; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.badge { white-space: nowrap; }
+.badge.fail { background: transparent; color: var(--danger); border: 1px solid currentColor; }
+.detail { padding: 4px 12px 16px 72px; display: grid; gap: 14px; }
+.compare { position: relative; max-width: 720px; background: repeating-conic-gradient(var(--raised) 0 25%, var(--surface) 0 50%) 0 0 / 16px 16px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
+.compare img { display: block; width: 100%; height: auto; }
+.compare img.after { position: absolute; inset: 0; height: 100%; clip-path: inset(0 0 0 var(--split, 50%)); }
+.compare .divider { position: absolute; top: 0; bottom: 0; left: var(--split, 50%); width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.compare input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+.compare .tag { position: absolute; top: 8px; font-size: 11.5px; padding: 2px 7px; border-radius: 4px; background: oklch(0.15 0 0 / 0.72); color: oklch(0.97 0 0); pointer-events: none; }
+.compare .tag.l { left: 8px; } .compare .tag.r { right: 8px; }
+.compare:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 4px 10px 4px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 560; }
+td.num, th.num { text-align: right; }
+td.why { white-space: normal; color: var(--muted); }
+tr.win td { color: var(--accent); font-weight: 600; }
+.scroll { overflow-x: auto; }
+
+.bar { position: fixed; left: 0; right: 392px; bottom: 0; padding: 12px 28px; background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); display: flex; gap: 16px; align-items: center; z-index: 5; }
+.bar .status { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.bar .status .line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+progress { width: 100%; height: 5px; appearance: none; border: 0; border-radius: 3px; background: var(--raised); overflow: hidden; }
+progress::-webkit-progress-bar { background: var(--raised); }
+progress::-webkit-progress-value { background: var(--accent); transition: width 0.3s var(--ease); }
+progress::-moz-progress-bar { background: var(--accent); }
+
+aside form { padding: 18px 20px 28px; display: grid; gap: 18px; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 6px; }
+legend, label.field > span { padding: 0; font-weight: 560; margin-bottom: 2px; }
+label.field { display: grid; gap: 4px; }
+.hint { color: var(--muted); font-size: 12.5px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); padding: 2px; gap: 2px; }
+.seg label { text-align: center; padding: 5px 4px; border-radius: 5px; cursor: pointer; color: var(--muted); transition: background 0.15s, color 0.15s; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(:checked) { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px oklch(0 0 0 / 0.18); }
+.seg label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+label.check { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+label.check input { margin: 3px 0 0; flex: none; }
+label.check:has(:disabled) { color: var(--muted); cursor: not-allowed; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.with-btn { display: flex; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips label { border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; cursor: pointer; color: var(--muted); }
+.chips input { position: absolute; opacity: 0; pointer-events: none; }
+.chips label:has(:checked) { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.chips label:has(:disabled) { opacity: 0.45; cursor: not-allowed; text-decoration: line-through; }
+.chips label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+aside details { border-top: 1px solid var(--line); padding-top: 12px; }
+aside details > summary { cursor: pointer; font-weight: 620; list-style: none; display: flex; align-items: center; gap: 6px; }
+aside details > summary::-webkit-details-marker { display: none; }
+aside details > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted); transform: rotate(-45deg); transition: transform 0.2s var(--ease); margin-right: 4px; }
+aside details[open] > summary::before { transform: rotate(45deg); }
+aside details .inner { display: grid; gap: 14px; padding: 14px 0 4px; }
+pre.cmd { margin: 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; }
+
+#toast { position: fixed; left: 28px; bottom: 84px; max-width: min(560px, calc(100vw - 460px)); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 11px 14px; display: none; gap: 12px; align-items: flex-start; z-index: 9; white-space: pre-wrap; }
+#toast.show { display: flex; }
+#toast.error { border-color: var(--danger); }
+
+@media (max-width: 940px) {
+  .shell { grid-template-columns: 1fr; }
+  aside { position: static; height: auto; border-left: 0; border-top: 1px solid var(--line); padding-bottom: 90px; }
+  main { padding: 16px 16px 24px; }
+  .bar { right: 0; padding: 10px 16px; }
+  .result .item { grid-template-columns: 48px minmax(0, 1fr) auto; }
+  .result .item .saving { grid-column: 2 / -1; }
+  .detail { padding-left: 12px; }
+  .section-head .spacer { flex-basis: 100%; height: 0; }
+  #toast { left: 16px; max-width: calc(100vw - 32px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<svg hidden>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M1.8 4.2c0-.7.5-1.2 1.2-1.2h3l1.4 1.6H13c.7 0 1.2.5 1.2 1.2v6c0 .7-.5 1.2-1.2 1.2H3c-.7 0-1.2-.5-1.2-1.2z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  <symbol id="i-image" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.6" cy="6.4" r="1"/><path d="M2.5 11.5l3.4-3 2.4 2 2-1.7 3.2 2.7"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"/></symbol>
+  <symbol id="i-open" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5V12a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 12V5.5A1.5 1.5 0 0 1 4 4h2.5"/></symbol>
+</svg>
+
+<div class="shell">
+<main id="drop-zone">
+  <header class="top">
+    <h1>smart-compress</h1>
+    <span class="muted small" id="env"></span>
+  </header>
+
+  <section class="block" aria-labelledby="h-images">
+    <div class="section-head">
+      <h2 id="h-images">Images</h2>
+      <span class="muted" id="queue-count"></span>
+      <span class="spacer"></span>
+      <button type="button" data-pick="files"><svg class="i"><use href="#i-plus"/></svg>Add images</button>
+      <button type="button" data-pick="folder"><svg class="i"><use href="#i-folder"/></svg>Add folder</button>
+      <button type="button" class="ghost" id="clear" hidden>Clear</button>
+    </div>
+    <div id="queue"></div>
+    <form class="addpath" id="addpath">
+      <input type="text" id="path-input" aria-label="Add by path" placeholder="Or paste a file or folder path and press Enter" autocomplete="off" spellcheck="false">
+      <button type="submit">Add</button>
+    </form>
+  </section>
+
+  <section class="block" id="results-block" aria-labelledby="h-results" hidden>
+    <div class="section-head">
+      <h2 id="h-results">Results</h2>
+      <span class="muted" id="results-summary"></span>
+    </div>
+    <div id="results"></div>
+  </section>
+</main>
+
+<aside aria-label="Settings">
+<form id="settings" autocomplete="off">
+  <fieldset>
+    <legend>Quality</legend>
+    <div class="seg">
+      <label><input type="radio" name="preset" value="strict">Strict</label>
+      <label><input type="radio" name="preset" value="balanced" checked>Balanced</label>
+      <label><input type="radio" name="preset" value="aggressive">Aggressive</label>
+    </div>
+    <p class="hint" id="preset-hint"></p>
+  </fieldset>
+
+  <label class="field"><span>Where the images will be used</span>
+    <select name="target" data-flag="--target" data-default="web">
+      <option value="web">Web: JPEG, PNG, WebP, AVIF</option>
+      <option value="max-compat">Anywhere: JPEG and PNG only</option>
+      <option value="smallest">Smallest file, any format (adds JPEG XL)</option>
+      <option value="archive">Archive: no JPEG, adds JPEG XL</option>
+    </select>
+  </label>
+
+  <fieldset>
+    <legend>Search effort</legend>
+    <div class="seg">
+      <label><input type="radio" name="speed" value="fast">Fast</label>
+      <label><input type="radio" name="speed" value="balanced" checked>Balanced</label>
+      <label><input type="radio" name="speed" value="exhaustive">Exhaustive</label>
+    </div>
+    <p class="hint">More effort tries more settings per format and takes longer.</p>
+  </fieldset>
+
+  <label class="field"><span>Save to</span>
+    <span class="with-btn">
+      <input type="text" name="out_dir" placeholder="An “optimized” folder next to each original" spellcheck="false">
+      <button type="button" data-browse="folder" data-for="out_dir">Browse</button>
+    </span>
+  </label>
+
+  <details>
+    <summary>Formats and quality floor</summary>
+    <div class="inner">
+      <label class="check"><input type="checkbox" name="custom_formats"><span>Choose the output formats myself<br><span class="hint">Otherwise the “used for” choice decides.</span></span></label>
+      <div class="chips" id="formats">
+        <label><input type="checkbox" name="fmt" value="jpeg" checked>JPEG</label>
+        <label><input type="checkbox" name="fmt" value="png" checked>PNG</label>
+        <label><input type="checkbox" name="fmt" value="webp" checked>WebP</label>
+        <label><input type="checkbox" name="fmt" value="avif" checked>AVIF</label>
+        <label><input type="checkbox" name="fmt" value="jxl">JPEG XL</label>
+      </div>
+      <div class="pair">
+        <label class="field"><span>Quality floor (0–100)</span><input type="number" name="min_quality" data-flag="--min-quality" min="0" max="100" step="0.5" placeholder="From preset"></label>
+        <label class="field"><span>Slack</span><input type="number" name="quality_slack" data-flag="--quality-slack" min="0" max="20" step="0.25" placeholder="0"></label>
+      </div>
+      <p class="hint">A candidate is kept only if its score plus the slack reaches the floor. On the SSIMULACRA2 scale 90 is visually lossless, 80 shows no difference side by side, 70 is high quality.</p>
+      <label class="field"><span>Scored with</span>
+        <select name="metric" data-flag="--metric" data-default="auto">
+          <option value="auto">Automatic: SSIMULACRA2 when installed</option>
+          <option value="ssimulacra2">SSIMULACRA2 (perceptual)</option>
+          <option value="builtin">Built-in score (faster, less accurate)</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="butteraugli" data-flag="--butteraugli" data-kind="switch" data-tool="butteraugli"><span>Also gate on Butteraugli<br><span class="hint">Very slow: over a minute per candidate on large photos.</span></span></label>
+      <label class="check"><input type="checkbox" name="allow_larger" data-flag="--allow-larger" data-kind="switch"><span>Accept results larger than the original</span></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Metadata and transparency</summary>
+    <div class="inner">
+      <label class="field"><span>Metadata</span>
+        <select name="metadata" data-flag="--metadata" data-default="safe">
+          <option value="safe">Safe: keep colour profile, drop EXIF</option>
+          <option value="keep">Keep colour profile and EXIF</option>
+          <option value="strip">Strip everything</option>
+        </select>
+      </label>
+      <label class="field"><span>Transparency</span>
+        <select name="alpha" data-flag="--alpha" data-default="preserve">
+          <option value="preserve">Preserve</option>
+          <option value="auto">Auto: drop the channel when fully opaque</option>
+          <option value="flatten">Flatten onto a background colour</option>
+        </select>
+      </label>
+      <label class="field" id="bg-field" hidden><span>Background colour</span><input type="color" name="background" value="#ffffff"></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Output files</summary>
+    <div class="inner">
+      <label class="field"><span>Exact output file (one image only)</span>
+        <span class="with-btn"><input type="text" name="out" data-flag="--out" placeholder="Named after the original" spellcheck="false"><button type="button" data-browse="save" data-for="out">Browse</button></span>
+      </label>
+      <p class="hint">The name is used as typed; its extension is not changed to match the winning format.</p>
+      <label class="check"><input type="checkbox" name="dry_run" data-flag="--dry-run" data-kind="switch"><span>Analyze only<br><span class="hint">Probe the images and report, without encoding or writing files.</span></span></label>
+      <label class="check"><input type="checkbox" name="overwrite" data-flag="--overwrite" data-kind="switch"><span>Replace existing files in the output folder</span></label>
+      <label class="check"><input type="checkbox" name="protect_inputs" data-flag="--protect-inputs" data-kind="bool" data-on="false" data-invert checked><span>Protect input images: never write over them</span></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>Performance and budgets</summary>
+    <div class="inner">
+      <div class="pair">
+        <label class="field"><span>Parallel workers</span><input type="number" name="workers" data-flag="--workers" min="1" step="1"></label>
+        <label class="field"><span>Max attempts per image</span><input type="number" name="max_candidate_attempts" data-flag="--max-candidate-attempts" min="1" step="1" placeholder="No limit"></label>
+        <label class="field"><span>Encoder timeout (s)</span><input type="number" name="candidate_timeout_seconds" data-flag="--candidate-timeout-seconds" min="1" step="1" placeholder="From effort"></label>
+        <label class="field"><span>Time per image (s)</span><input type="number" name="max_image_time_seconds" data-flag="--max-image-time-seconds" min="1" step="1" placeholder="No limit"></label>
+        <label class="field"><span>Temp disk per image (MB)</span><input type="number" name="max_temp" data-flag="--max-temp-bytes" data-scale="1048576" min="1" step="1" placeholder="No limit"></label>
+        <label class="field"><span>Temp disk per run (MB)</span><input type="number" name="max_run_temp" data-flag="--max-run-temp-bytes" data-scale="1048576" min="1" step="1" placeholder="No limit"></label>
+      </div>
+      <p class="hint">Setting a temp-disk budget encodes candidates one at a time so the budget can stop the search early.</p>
+      <label class="check"><input type="checkbox" name="verbose" data-flag="--verbose" data-kind="switch"><span>Score every candidate, even ones that cannot win</span></label>
+    </div>
+  </details>
+
+  <details>
+    <summary>GPU</summary>
+    <div class="inner">
+      <label class="field"><span>Quality scoring runs on</span>
+        <select name="gpu_mode">
+          <option value="auto">GPU when available, otherwise CPU</option>
+          <option value="cpu">CPU only</option>
+          <option value="required">GPU only: fail instead of falling back</option>
+        </select>
+      </label>
+      <label class="field"><span>Adapter</span><select name="gpu_adapter" data-flag="--gpu-adapter-name" data-default=""><option value="">Automatic</option></select></label>
+      <label class="field"><span>Use the GPU from this many megapixels</span><input type="number" name="gpu_min_pixels" data-flag="--gpu-min-pixels" data-scale="1000000" min="0" step="0.05" placeholder="0"></label>
+      <label class="check"><input type="checkbox" name="verify_gpu" data-flag="--verify-gpu" data-kind="switch"><span>Verify every GPU score against the CPU<br><span class="hint">Doubles scoring work; records the differences in the report.</span></span></label>
+      <p class="hint" id="gpu-hint"></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Input limits</summary>
+    <div class="inner">
+      <div class="pair">
+        <label class="field"><span>Megapixels</span><input type="number" name="max_pixels" data-flag="--max-pixels" data-scale="1000000" min="1" step="1" placeholder="100"></label>
+        <label class="field"><span>File size (MB)</span><input type="number" name="max_input" data-flag="--max-input-bytes" data-scale="1048576" min="1" step="1" placeholder="2048"></label>
+        <label class="field"><span>Width (px)</span><input type="number" name="max_width" data-flag="--max-width" min="1" step="1" placeholder="100000"></label>
+        <label class="field"><span>Height (px)</span><input type="number" name="max_height" data-flag="--max-height" min="1" step="1" placeholder="100000"></label>
+        <label class="field"><span>Decoded size (MB)</span><input type="number" name="max_decoded" data-flag="--max-decoded-bytes" data-scale="1048576" min="1" step="1" placeholder="2048"></label>
+        <label class="field"><span>Metadata (MB)</span><input type="number" name="max_metadata" data-flag="--max-metadata-bytes" data-scale="1048576" min="1" step="1" placeholder="16"></label>
+        <label class="field"><span>Bits per pixel</span><input type="number" name="max_bpp" data-flag="--max-bits-per-pixel" min="1" step="1" placeholder="64"></label>
+      </div>
+      <p class="hint">Images beyond a limit are rejected before they are decoded.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Cache</summary>
+    <div class="inner">
+      <label class="check"><input type="checkbox" name="cache" data-flag="--cache" data-kind="switch"><span>Reuse encoded candidates between runs</span></label>
+      <label class="field"><span>Cache folder</span>
+        <span class="with-btn"><input type="text" name="cache_dir" placeholder="A smart-compress folder in your user cache" spellcheck="false"><button type="button" data-browse="folder" data-for="cache_dir">Browse</button></span>
+      </label>
+      <div class="pair">
+        <label class="field"><span>Size limit (MB)</span><input type="number" name="cache_max" min="1" step="1" placeholder="No limit"></label>
+        <label class="field"><span>Age limit (days)</span><input type="number" name="cache_max_age" min="1" step="1" placeholder="No limit"></label>
+      </div>
+      <div><button type="button" id="prune">Prune cache now</button></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Reports and config file</summary>
+    <div class="inner">
+      <label class="field"><span>Save a report to</span>
+        <span class="with-btn"><input type="text" name="report_out" data-flag="--report-out" placeholder="Not saved" spellcheck="false"><button type="button" data-browse="save" data-for="report_out">Browse</button></span>
+      </label>
+      <label class="field"><span>Report format</span>
+        <select name="report" data-flag="--report" data-default="text"><option value="text">Text</option><option value="json">JSON (resumable)</option><option value="markdown">Markdown</option></select>
+      </label>
+      <label class="field"><span>Resume from a JSON report</span>
+        <span class="with-btn"><input type="text" name="resume_report" data-flag="--resume-report" placeholder="Start fresh" spellcheck="false"><button type="button" data-browse="open" data-for="resume_report">Browse</button></span>
+      </label>
+      <p class="hint">Resuming needs “Save a report to” set; inputs that finished cleanly and are unchanged are skipped.</p>
+      <div><button type="button" id="validate">Check a saved report…</button></div>
+      <label class="field"><span>Config file (TOML)</span>
+        <span class="with-btn"><input type="text" name="config" data-flag="--config" placeholder="None" spellcheck="false"><button type="button" data-browse="open" data-for="config">Browse</button></span>
+      </label>
+      <p class="hint">Settings on this panel override the file.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Equivalent command</summary>
+    <div class="inner">
+      <pre class="cmd" id="cmd"></pre>
+      <div class="row"><button type="button" id="copy"><svg class="i"><use href="#i-copy"/></svg>Copy</button><button type="button" class="ghost" id="reset-settings">Reset all settings</button></div>
+    </div>
+  </details>
+
+  <p class="hint" id="tools"></p>
+</form>
+</aside>
+</div>
+
+<div class="bar">
+  <div class="status" aria-live="polite">
+    <div class="line" id="status-line">Add images to begin.</div>
+    <progress id="progress" max="1" value="0" hidden></progress>
+  </div>
+  <button type="button" class="danger" id="cancel" hidden>Cancel</button>
+  <button type="button" class="primary" id="run" disabled>Compress</button>
+</div>
+<div id="toast" role="status"><span id="toast-text"></span><button type="button" class="ghost" id="toast-close" aria-label="Dismiss"><svg class="i"><use href="#i-x"/></svg></button></div>
+
+<script nonce="{{nonce}}">
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const form = $("#settings");
+const THUMB_LIMIT = 25 * 1024 * 1024;
+const PRESET_FLOOR = { true: { strict: 90, balanced: 80, aggressive: 70 }, false: { strict: 88, balanced: 73, aggressive: 68 } };
+const PRESET_MEANING = { strict: "Visually lossless: no difference even when flipping between the two.", balanced: "No visible difference side by side at full size.", aggressive: "High quality: differences show only on close comparison." };
+let items = [];
+let info = null;
+let running = false;
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === false || value == null) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key === "style") node.style.cssText = value; // the page's CSP blocks style attributes, not the CSSOM
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) if (child != null) node.append(child);
+  return node;
+}
+function icon(name) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "i");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "#i-" + name);
+  svg.append(use);
+  return svg;
+}
+function bytes(n) {
+  if (n == null) return "–";
+  const abs = Math.abs(n);
+  if (abs < 1024) return n + " B";
+  if (abs < 1048576) return (n / 1024).toFixed(abs < 10240 ? 1 : 0) + " KB";
+  if (abs < 1073741824) return (n / 1048576).toFixed(abs < 10485760 ? 2 : 1) + " MB";
+  return (n / 1073741824).toFixed(2) + " GB";
+}
+function duration(ms) {
+  if (ms == null) return "–";
+  if (ms < 1000) return ms + " ms";
+  const s = ms / 1000;
+  return s < 60 ? s.toFixed(1) + " s" : Math.floor(s / 60) + " min " + Math.round(s % 60) + " s";
+}
+const baseName = (path) => path.split(/[\\/]/).pop();
+const dirName = (path) => path.replace(/[\\/][^\\/]*$/, "");
+const fileUrl = (path) => "/api/file?t=" + encodeURIComponent(TOKEN) + "&path=" + encodeURIComponent(path);
+
+async function api(path, body) {
+  const response = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Token": TOKEN, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({ error: "The control panel returned an unreadable reply." }));
+  if (!response.ok || data.error) throw new Error(data.error || "Request failed (" + response.status + ")");
+  return data;
+}
+let toastTimer;
+function toast(message, isError = false) {
+  $("#toast-text").textContent = message;
+  $("#toast").className = "show" + (isError ? " error" : "");
+  clearTimeout(toastTimer);
+  if (!isError) toastTimer = setTimeout(() => ($("#toast").className = ""), 5000);
+}
+const fail = (error) => toast(error.message || String(error), true);
+$("#toast-close").onclick = () => ($("#toast").className = "");
+
+/* ---------- queue ---------- */
+async function addPaths(paths, dropped = false) {
+  const fresh = paths.map((p) => p.trim().replace(/^"|"$/g, "")).filter((p) => p && !items.some((item) => item.path === p));
+  if (!fresh.length) return;
+  const stats = await api("/api/stat", { paths: fresh });
+  const rejected = stats.filter((s) => s.kind === "missing" || s.kind === "unsupported" || s.kind === "remote");
+  items.push(...stats.filter((s) => s.kind === "file" || s.kind === "dir").map((s) => ({ ...s, dropped })));
+  if (rejected.length) {
+    const reasons = { missing: ": not found", remote: ": network paths are not accepted here; use a drive letter" };
+    toast(rejected.map((s) => baseName(s.path) + (reasons[s.kind] || ": not a supported image (PNG, JPEG, WebP, AVIF)")).join("\n"), true);
+  }
+  renderQueue();
+}
+function renderQueue() {
+  const queue = $("#queue");
+  queue.replaceChildren();
+  $("#clear").hidden = !items.length;
+  const files = items.filter((item) => item.kind === "file").length;
+  const inFolders = items.filter((item) => item.kind === "dir").reduce((sum, item) => sum + item.count, 0);
+  const total = files + inFolders;
+  $("#queue-count").textContent = total ? total + (total === 1 ? " image" : " images") + " · " + bytes(items.reduce((s, i) => s + (i.size || 0), 0)) + (inFolders ? " plus folders" : "") : "";
+  if (!items.length) {
+    queue.append(el("div", { class: "empty" },
+      el("h3", { text: "No images yet" }),
+      el("p", { text: "Drop PNG, JPEG, WebP or AVIF files here, or add files or a whole folder. Originals are never changed; results go to a separate folder." }),
+      el("div", { class: "row" },
+        el("button", { type: "button", onclick: () => pick("files") }, icon("plus"), "Add images"),
+        el("button", { type: "button", onclick: () => pick("folder") }, icon("folder"), "Add folder"))));
+  } else {
+    queue.append(el("ul", { class: "list" }, items.map((item) => {
+      const thumb = el("div", { class: "thumb" });
+      if (item.kind === "file" && item.size <= THUMB_LIMIT) thumb.append(el("img", { src: fileUrl(item.path), alt: "", loading: "lazy", decoding: "async" }));
+      else thumb.append(icon(item.kind === "dir" ? "folder" : "image"));
+      return el("li", { class: "item" }, thumb,
+        el("div", {}, el("div", { class: "name", text: baseName(item.path) }), el("div", { class: "path muted small", text: item.dropped ? "Dropped copy" : dirName(item.path), title: item.path })),
+        el("span", { class: "muted", text: item.kind === "dir" ? item.count + " images, with subfolders" : bytes(item.size) }),
+        el("button", { type: "button", class: "ghost", "aria-label": "Remove " + baseName(item.path), disabled: running, onclick: () => { items = items.filter((other) => other !== item); renderQueue(); } }, icon("x")));
+    })));
+  }
+  refresh();
+}
+async function pick(kind) {
+  try {
+    const { paths } = await api("/api/pick", { kind });
+    await addPaths(paths);
+  } catch (error) { fail(error); }
+}
+$$("[data-pick]").forEach((button) => (button.onclick = () => pick(button.dataset.pick)));
+const dropZone = $("#drop-zone");
+const hasFiles = (event) => [...(event.dataTransfer?.types || [])].includes("Files");
+addEventListener("dragover", (event) => { if (hasFiles(event)) { event.preventDefault(); dropZone.classList.add("dragging"); } });
+addEventListener("dragleave", (event) => { if (!event.relatedTarget) dropZone.classList.remove("dragging"); });
+addEventListener("drop", async (event) => {
+  if (!hasFiles(event)) return;
+  event.preventDefault();
+  dropZone.classList.remove("dragging");
+  if (running) return toast("Wait for the current run to finish before adding images.", true);
+  const files = [...event.dataTransfer.files];
+  const problems = [];
+  for (const [index, file] of files.entries()) {
+    $("#status-line").textContent = "Copying dropped file " + (index + 1) + " of " + files.length + "…";
+    try {
+      const response = await fetch("/api/upload?name=" + encodeURIComponent(file.name), { method: "POST", headers: { "X-Token": TOKEN }, body: file });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || "upload failed");
+      await addPaths([data.path], true);
+    } catch (error) { problems.push(file.name + ": " + (file.size === 0 && !file.type ? "folders cannot be dropped; use Add folder" : error.message)); }
+  }
+  delete $("#status-line").dataset.done;
+  refresh();
+  if (problems.length) toast(problems.join("\n"), true);
+});
+$("#clear").onclick = () => { items = []; renderQueue(); };
+$("#addpath").onsubmit = (event) => {
+  event.preventDefault();
+  const input = $("#path-input");
+  addPaths(input.value.split(/[\n;]/)).then(() => (input.value = ""), fail);
+};
+$$("[data-browse]").forEach((button) => (button.onclick = async () => {
+  try {
+    const { paths } = await api("/api/pick", { kind: button.dataset.browse });
+    if (paths[0]) { form.elements[button.dataset.for].value = paths[0]; refresh(); }
+  } catch (error) { fail(error); }
+}));
+
+/* ---------- settings to arguments ---------- */
+function settingArgs() {
+  const f = form.elements;
+  const args = ["--preset", f.preset.value, "--speed", f.speed.value];
+  for (const input of $$("[data-flag]", form)) {
+    const flag = input.dataset.flag;
+    if (input.disabled) continue;
+    if (input.type === "checkbox") {
+      const active = input.hasAttribute("data-invert") ? !input.checked : input.checked;
+      if (active) args.push(input.dataset.kind === "bool" ? flag + "=" + input.dataset.on : flag);
+    } else if (input.value !== "" && input.value !== input.dataset.default) {
+      args.push(flag, input.dataset.scale ? String(Math.round(Number(input.value) * Number(input.dataset.scale))) : input.value);
+    }
+  }
+  if (f.custom_formats.checked) {
+    const formats = $$("[name=fmt]:checked:not(:disabled)", form).map((box) => box.value);
+    if (formats.length) args.push("--formats", formats.join(","));
+  }
+  if (f.alpha.value === "flatten") args.push("--background", f.background.value);
+  if (f.gpu_mode.value === "cpu") args.push("--cpu-only");
+  if (f.gpu_mode.value === "required") args.push("--gpu-required");
+  // Dropped files are temporary copies, so their results need a lasting home.
+  const outDir = f.out_dir.value || (info && !f.out.value && items.some((item) => item.dropped) ? info.drop_output : "");
+  if (outDir && !(f.out.value && !f.out.disabled)) args.push("--out-dir", outDir);
+  if (f.cache_dir.value) args.push("--cache-dir", f.cache_dir.value);
+  if (f.cache_max.value) args.push("--cache-max-bytes", String(Math.round(Number(f.cache_max.value) * 1048576)));
+  if (f.cache_max_age.value) args.push("--cache-max-age-days", f.cache_max_age.value);
+  return args;
+}
+function runArgs() {
+  const args = items.map((item) => item.path);
+  if (items.some((item) => item.kind === "dir")) args.push("--recursive");
+  return args.concat(settingArgs());
+}
+const quote = (arg) => (/^[\w@%+=:,./\\-]+$/.test(arg) ? arg : '"' + arg.replace(/"/g, '\\"') + '"');
+
+function refresh() {
+  const f = form.elements;
+  $("#bg-field").hidden = f.alpha.value !== "flatten";
+  $("#formats").style.display = f.custom_formats.checked ? "" : "none";
+  const perceptual = f.metric.value === "ssimulacra2" || (f.metric.value === "auto" && (!info || info.tools.ssimulacra2.enabled));
+  const floor = f.min_quality.value || PRESET_FLOOR[perceptual][f.preset.value];
+  $("#preset-hint").textContent = (f.min_quality.value ? "Custom floor: " : PRESET_MEANING[f.preset.value] + " ") + "Keeps the smallest file scoring at least " + floor + (perceptual ? " on SSIMULACRA2." : " on the built-in score.");
+  const oneFile = items.length === 1 && items[0].kind === "file";
+  f.out.disabled = !oneFile;
+  const dropped = items.some((item) => item.dropped);
+  f.out_dir.placeholder = dropped && info ? "Dropped files save to " + info.drop_output : "An “optimized” folder next to each original";
+  $("#cmd").textContent = "smart-compress " + runArgs().map(quote).join(" ");
+  const count = items.filter((i) => i.kind === "file").length + items.filter((i) => i.kind === "dir").reduce((s, i) => s + i.count, 0);
+  const run = $("#run");
+  run.disabled = running || !count;
+  run.textContent = f.dry_run.checked ? "Analyze" + (count ? " " + count : "") : count ? "Compress " + count + (count === 1 ? " image" : " images") : "Compress";
+  if (!running && !count) $("#status-line").textContent = "Add images to begin.";
+  else if (!running && !$("#status-line").dataset.done) $("#status-line").textContent = "Ready.";
+  try {
+    const saved = {};
+    for (const input of $$("[name]", form)) {
+      if (input.type === "radio") { if (input.checked) saved[input.name] = input.value; }
+      else if (input.name === "fmt") (saved.fmt ||= []).push([input.value, input.checked]);
+      else saved[input.name] = input.type === "checkbox" ? input.checked : input.value;
+    }
+    localStorage.setItem("smart-compress-settings", JSON.stringify(saved));
+  } catch {}
+}
+function restore() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem("smart-compress-settings") || "null"); } catch {}
+  if (!saved) return;
+  for (const input of $$("[name]", form)) {
+    const value = saved[input.name];
+    if (value === undefined) continue;
+    if (input.type === "radio") input.checked = input.value === value;
+    else if (input.name === "fmt") { const hit = value.find(([name]) => name === input.value); if (hit) input.checked = hit[1]; }
+    else if (input.type === "checkbox") input.checked = value;
+    else if (input.tagName !== "SELECT" || [...input.options].some((o) => o.value === value)) input.value = value;
+  }
+}
+form.addEventListener("input", () => { delete $("#status-line").dataset.done; refresh(); });
+form.addEventListener("submit", (event) => event.preventDefault());
+$("#copy").onclick = () => navigator.clipboard.writeText($("#cmd").textContent).then(() => toast("Command copied."), fail);
+$("#reset-settings").onclick = () => { form.reset(); if (info) form.elements.workers.value = info.workers; refresh(); toast("Settings reset to defaults."); };
+$("#prune").onclick = async () => {
+  const f = form.elements;
+  if (!f.cache_max.value && !f.cache_max_age.value) return toast("Set a size or age limit first; pruning removes entries beyond it.", true);
+  const args = ["--cache-prune"];
+  if (f.cache_dir.value) args.push("--cache-dir", f.cache_dir.value);
+  if (f.cache_max.value) args.push("--cache-max-bytes", String(Math.round(Number(f.cache_max.value) * 1048576)));
+  if (f.cache_max_age.value) args.push("--cache-max-age-days", f.cache_max_age.value);
+  try { toast((await api("/api/run", { argv: args })).message); } catch (error) { fail(error); }
+};
+$("#validate").onclick = async () => {
+  try {
+    const { paths } = await api("/api/pick", { kind: "open" });
+    if (paths[0]) toast((await api("/api/run", { argv: ["--validate-report", paths[0]] })).message);
+  } catch (error) { fail(error); }
+};
+
+/* ---------- run ---------- */
+function setRunning(value) {
+  running = value;
+  $("#cancel").hidden = !value;
+  $("#progress").hidden = !value;
+  $$("#queue button, [data-pick], #clear, #addpath button").forEach((button) => (button.disabled = value));
+  refresh();
+}
+$("#run").onclick = async () => {
+  try {
+    await api("/api/run", { argv: runArgs() });
+    $("#results-block").hidden = true;
+    delete $("#status-line").dataset.done;
+    $("#status-line").textContent = "Starting…";
+    $("#progress").removeAttribute("value");
+    setRunning(true);
+    poll();
+  } catch (error) { fail(error); }
+};
+$("#cancel").onclick = () => { $("#status-line").textContent = "Cancelling: stopping encoders…"; api("/api/cancel", {}).catch(fail); };
+
+async function poll() {
+  let status;
+  try { status = await api("/api/status"); }
+  catch (error) { fail(new Error("Lost contact with smart-compress. Is it still running in its terminal window?")); setRunning(false); return; }
+  if (status.running) {
+    const progress = $("#progress");
+    if (status.total) {
+      const partial = status.files.reduce((sum, file) => sum + (file.total ? Math.min(1, file.index / file.total) : 0), 0);
+      progress.max = status.total;
+      progress.value = Math.min(status.total, status.done + partial);
+      const active = status.files[0];
+      if (!$("#status-line").textContent.startsWith("Cancelling")) {
+        $("#status-line").textContent = status.done + " of " + status.total + " done · " + duration(status.elapsed_ms)
+          + (active ? " · " + baseName(active.path) + (active.label ? ": " + active.label : ": reading") + (active.total ? " (" + Math.min(active.index, active.total) + "/" + active.total + ")" : "") : "");
+      }
+    }
+    setTimeout(poll, 300);
+    return;
+  }
+  setRunning(false);
+  $("#status-line").dataset.done = "1";
+  if (status.error) { $("#status-line").textContent = "Stopped: nothing was written."; fail(new Error(status.error)); return; }
+  if (status.report) renderResults(status.report, status.elapsed_ms);
+}
+
+function statusText(status) {
+  if (typeof status === "string") return status === "Accepted" ? "Passed" : status;
+  const [kind, reason] = Object.entries(status)[0];
+  return kind + ": " + reason;
+}
+function settingsText(settings) {
+  if (settings === "Lossless") return "lossless";
+  if (settings.Quality) return "q" + settings.Quality.quality;
+  if (settings.Palette) return settings.Palette.colors + " colours";
+  return JSON.stringify(settings);
+}
+function renderResults(report, elapsed) {
+  const list = el("ul", { class: "list" });
+  let before = 0, after = 0, written = 0;
+  report.reports.forEach((image, index) => {
+    const winner = image.winner_index == null ? null : image.candidates[image.winner_index];
+    const failed = image.outcome === "failed";
+    const kept = image.outcome === "kept";
+    const skipped = image.outcome === "skipped";
+    const saved = image.saved_bytes;
+    if (winner && image.output) { before += image.original_size; after += winner.size_bytes; written++; }
+    const percent = winner && image.original_size ? Math.round((1 - winner.size_bytes / image.original_size) * 100) : 0;
+    const thumb = el("div", { class: "thumb" });
+    if (image.original_size <= THUMB_LIMIT) thumb.append(el("img", { src: fileUrl(image.input), alt: "", loading: "lazy", decoding: "async" }));
+    else thumb.append(icon("image"));
+    let middle;
+    if (skipped) middle = el("div", { class: "muted small", text: "Skipped: the output already exists and overwriting is off." });
+    else if (kept) middle = el("div", { class: "muted small", text: "Original kept: no format scored high enough while being smaller. Lower the quality floor or raise the search effort to try harder." });
+    else if (failed) middle = el("div", { class: "bad small", text: image.errors.join(" · ") });
+    else if (image.dry_run) middle = el("div", { class: "muted small", text: image.probe ? image.probe.width + " × " + image.probe.height + " · " + image.probe.content_class.replace("-", " ") + (image.probe.has_alpha ? " · transparency" : "") : "" });
+    else middle = el("div", { class: "saving" },
+      el("div", { class: "figures" }, el("strong", { text: (percent >= 0 ? percent + "% smaller" : -percent + "% larger") }), el("span", { class: "muted small", text: bytes(image.original_size) + " → " + bytes(winner.size_bytes) })),
+      el("div", { class: "meter" }, el("i", { style: "--w:" + Math.max(0, Math.min(100, percent)) + "%;--d:" + Math.min(index * 0.05, 0.6) + "s" })));
+    const badge = failed ? el("span", { class: "badge fail", text: image.errors[0] === "cancelled" ? "Cancelled" : "Failed" })
+      : kept ? el("span", { class: "badge fail", text: "No saving" })
+      : skipped ? el("span", { class: "badge", text: "Skipped" })
+      : winner ? el("span", { class: "badge", text: winner.codec + " " + settingsText(winner.settings) }) : el("span", { class: "badge", text: "Analyzed" });
+    const detail = el("div", { class: "detail" });
+    const row = el("details", { class: "result" },
+      el("summary", {}, el("div", { class: "item" }, thumb,
+        el("div", {}, el("div", { class: "name", text: baseName(image.input) }), el("div", { class: "path muted small", text: image.output || dirName(image.input), title: image.output || image.input })),
+        middle, badge)),
+      detail);
+    row.addEventListener("toggle", () => { if (row.open && !detail.childElementCount) fillDetail(detail, image, winner, report.gpu ? report.gpu.warnings : []); });
+    list.append(el("li", {}, row));
+  });
+  $("#results").replaceChildren(list);
+  $("#results-block").hidden = false;
+  const count = (outcome) => report.reports.filter((r) => r.outcome === outcome).length;
+  const failures = count("failed"), unchanged = count("kept"), skippedCount = count("skipped");
+  const summary = written ? written + (written === 1 ? " file" : " files") + " written · " + bytes(before) + " → " + bytes(after) + " (" + Math.round((1 - after / before) * 100) + "% smaller)" : report.reports.every((r) => r.dry_run) ? report.reports.length + " analyzed, nothing written" : "Nothing written";
+  const tail = (unchanged > 0 ? " · " + unchanged + " kept as original" : "") + (skippedCount ? " · " + skippedCount + " skipped" : "") + (failures ? " · " + failures + " failed" : "");
+  $("#results-summary").textContent = summary + tail + " · " + duration(elapsed);
+  $("#status-line").textContent = (failures ? failures + " of " + report.reports.length + " failed. " : "Done. ") + summary + tail + ".";
+  if (report.warnings && report.warnings.length) $("#status-line").textContent += " " + report.warnings.join(" · ");
+  if (report.reports.length === 1) list.querySelector("details").open = true;
+  $("#results-block").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+function fillDetail(detail, image, winner, gpuWarnings) {
+  if (winner && image.output) {
+    const viewable = !/\.jxl$/i.test(image.output) && image.original_size <= 4 * THUMB_LIMIT;
+    if (viewable && image.probe) {
+      const compare = el("div", { class: "compare", style: "aspect-ratio:" + image.probe.width + "/" + image.probe.height + ";max-width:min(720px,calc(68vh*" + (image.probe.width / image.probe.height).toFixed(4) + "))" },
+        el("img", { src: fileUrl(image.input), alt: "Original", loading: "lazy" }),
+        el("img", { class: "after", src: fileUrl(image.output), alt: "Compressed result", loading: "lazy" }),
+        el("div", { class: "divider" }), el("span", { class: "tag l", text: "Original" }), el("span", { class: "tag r", text: "Compressed" }));
+      const slider = el("input", { type: "range", min: 0, max: 100, value: 50, "aria-label": "Comparison position: original on the left, compressed on the right" });
+      slider.addEventListener("input", () => compare.style.setProperty("--split", slider.value + "%"));
+      compare.append(slider);
+      detail.append(compare);
+    } else {
+      detail.append(el("p", { class: "muted small", text: /\.jxl$/i.test(image.output) ? "Browsers cannot display JPEG XL, so there is no side-by-side preview. Open the folder to view the file." : "This image is too large to preview here." }));
+    }
+    detail.append(el("div", { class: "row" },
+      el("button", { type: "button", onclick: () => api("/api/open", { path: image.output }).catch(fail) }, icon("open"), "Show in folder"),
+      el("span", { class: "muted small", text: "Score " + (winner.quality ? winner.quality.overall.toFixed(1) : "–") + (image.min_quality != null ? " (floor " + image.min_quality + ", " + (image.quality_metric === "ssimulacra2" ? "SSIMULACRA2" : "built-in score") + ")" : "") + " · " + duration(Number(image.timings.total_ms)) })));
+  }
+  const notes = [...(image.warnings || []), ...gpuWarnings];
+  if (notes.length) detail.append(el("p", { class: "warn small", text: notes.join(" · ") }));
+  if (image.candidates.length) {
+    const body = el("tbody");
+    image.candidates.forEach((candidate, index) => body.append(el("tr", { class: index === image.winner_index ? "win" : null },
+      el("td", { text: candidate.codec.toUpperCase() }), el("td", { text: settingsText(candidate.settings) }),
+      el("td", { class: "num", text: bytes(candidate.size_bytes) }),
+      el("td", { class: "num", text: candidate.quality ? candidate.quality.overall.toFixed(1) : "–" }),
+      el("td", { class: "num", text: candidate.encode_ms == null ? "–" : duration(Number(candidate.encode_ms)) }),
+      el("td", { class: "why", text: index === image.winner_index ? "Chosen" : statusText(candidate.status) }))));
+    detail.append(el("div", { class: "scroll" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "Format" }), el("th", { text: "Setting" }), el("th", { class: "num", text: "Size" }), el("th", { class: "num", text: "Score" }), el("th", { class: "num", text: "Encode" }), el("th", { text: "Outcome" }))),
+      body)));
+  }
+}
+
+// Lets a windowed panel shut its server down when the window closes, and
+// keeps it alive while the window is merely idle.
+addEventListener("pagehide", () => navigator.sendBeacon("/api/bye?t=" + encodeURIComponent(TOKEN), new Blob(["{}"], { type: "application/json" })));
+setInterval(() => { if (!running) api("/api/status").catch(() => {}); }, 30000);
+
+/* ---------- start ---------- */
+(async () => {
+  restore();
+  renderQueue();
+  try {
+    info = await api("/api/info");
+  } catch (error) {
+    fail(new Error(TOKEN ? error.message : "Open the link printed by “smart-compress --gui”; it carries this session’s access token."));
+    return;
+  }
+  const f = form.elements;
+  if (!f.workers.value) f.workers.value = info.workers;
+  f.workers.dataset.default = info.workers;
+  f.workers.placeholder = info.workers;
+  const tools = info.tools;
+  const need = { webp: tools.cwebp.enabled, avif: tools.avifenc.enabled && tools.avifdec.enabled, jxl: tools.cjxl.enabled && tools.djxl.enabled };
+  for (const box of $$("[name=fmt]", form)) if (need[box.value] === false) { box.disabled = true; box.parentElement.title = "Encoder not installed"; }
+  for (const box of $$("[data-tool]", form)) if (!tools[box.dataset.tool].enabled) { box.disabled = true; box.checked = false; box.parentElement.title = "Tool not installed"; }
+  const adapters = info.gpu.available_adapters || [];
+  for (const name of [...new Set(adapters.map((a) => a.name))]) f.gpu_adapter.append(el("option", { value: name, text: name }));
+  $("#gpu-hint").textContent = adapters.length ? "Detected: " + adapters.map((a) => a.name + " (" + a.backend + ")").join(", ") + "." : "No GPU adapter detected; scoring runs on the CPU.";
+  const found = Object.values(tools).filter((t) => t.enabled).map((t) => t.name);
+  const missing = Object.values(tools).filter((t) => !t.enabled).map((t) => t.name);
+  $("#tools").textContent = "Encoders found: " + (found.join(", ") || "built-in PNG and JPEG only") + "." + (missing.length ? " Not installed: " + missing.join(", ") + "." : "");
+  $("#env").textContent = "v" + info.version + " · working in " + info.cwd;
+  if (!info.native_dialogs) $$("[data-pick], [data-browse]").forEach((b) => (b.hidden = true));
+  restore();
+  refresh();
+  const status = await api("/api/status").catch(() => null);
+  if (status && status.running) { setRunning(true); poll(); }
+  else if (status && status.report) { $("#status-line").dataset.done = "1"; renderResults(status.report, status.elapsed_ms); }
+})();
+</script>
+</body>
+</html>

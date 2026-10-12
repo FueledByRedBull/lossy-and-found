@@ -1,0 +1,39 @@
+[package]
+name = "smart-compress-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+comfy-table.workspace = true
+image.workspace = true
+ignore.workspace = true
+pollster.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+smart-compress-codecs = { path = "../smart-compress-codecs" }
+smart-compress-metrics = { path = "../smart-compress-metrics" }
+tempfile.workspace = true
+toml.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+# The input tests encode GIF and BMP files to check that they are refused; the
+# library itself does not read either format.
+image = { workspace = true, features = ["bmp", "gif"] }
+tempfile.workspace = true
+
+[[bench]]
+name = "gpu_metrics"
+harness = false

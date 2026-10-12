@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: windows-latest
+    env:
+      # Every test that needs an encoder fails, instead of skipping, if it is
+      # missing. The fetch step below installs all that the tests ask for.
+      SMART_COMPRESS_REQUIRE_TOOLS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache encoder downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\tool-downloads
+          key: tool-downloads-${{ hashFiles('tools/fetch-tools.ps1') }}
+      - name: Fetch encoders
+        shell: pwsh
+        run: ./tools/fetch-tools.ps1 -CacheDir "$env:RUNNER_TEMP\tool-downloads"
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: CPU and fixture tests
+        run: cargo test --workspace --lib --tests -- --skip gpu_prepared_scores_match_known_large_image
+      - name: CLI binaries
+        run: cargo test -p smart-compress --bin smart-compress --bin smart-compress-benchmark

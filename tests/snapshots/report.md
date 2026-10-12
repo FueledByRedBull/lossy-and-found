@@ -1,0 +1,77 @@
+# Run
+
+- Metric color space: `srgb-relative-v1`
+- GPU: `Enabled`
+- GPU Adapter: `Example GPU`
+- Missing Optional Tools:
+  - `cjxl`: Install cjxl to enable this format.
+  - `djxl`: Install djxl to enable this format.
+  - `cjpeg`: Install cjpeg to enable this format.
+
+## photos/harbour.jpg
+
+- Report schema: 6; scoring: `score-snapshot`
+- Original: 1000000 bytes
+- Dimensions: 3000x2000
+- Classification: `Photo`
+- Decoded Color: `Rgb8`
+- Source Color: `Rgb8`
+- ICC Profile: `3144` bytes
+- Compute: `gpu-wgpu`
+- Output: `optimized/harbour.avif`
+- Timings (ms): open 2, decode 40, preprocess -, orientation 12, probe 8, normalize 55, cache 1, metric-prepare 30, search 9000, write 4, total 9152, backpressure wait 310
+- Warnings: embedded ICC profile dropped: it describes GRAY data but the image decodes to RGB
+- Search stopped early: candidate attempt budget of 7 reached
+
+| Codec | Settings | Size | Quality | SSIM2 | Butter | Score backend | Cache source | Preprocess ms | Score ms | Total ms | Status |
+|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|
+| Jpeg | q78/e0 | 365000 | 81.4 | 81.4 | - | cpu-fallback (GPU metric scoring failed: device lost) | fresh | - | - | 400 | Accepted |
+| Jpeg | q92/e0 | 890000 | - | - | - | - | fresh | - | - | 400 | Skipped("dominated by current accepted candidate") |
+| Webp | q60/e4 | 240000 | 74.2 | 74.2 | - | gpu | fresh | - | - | 400 | Rejected("quality 74.2 below 80.0") |
+| Webp | q78/e4 | 420000 | 83.1 | 83.1 | - | - | score-metadata | - | - | 3 | Accepted |
+| Avif | lossless | - | - | - | - | - | fresh | - | - | 120050 | Failed("tools/avifenc.exe Timeout after 120000 ms: terminated") |
+| Avif | q72/e6 | 310000 | 80.6 | 80.6 | - | gpu | fresh | - | 210 | 400 | Accepted |
+| Png | lossless | 4800000 | - | - | - | - | fresh | - | - | 60 | Rejected("not smaller than original") |
+
+## photos/receipt.jpg
+
+- Report schema: 6; scoring: `score-snapshot`
+- Original: 48000 bytes
+- Dimensions: 3000x2000
+- Classification: `Photo`
+- Decoded Color: `Rgb8`
+- Source Color: `Rgb8`
+- ICC Profile: `3144` bytes
+- Compute: `gpu-wgpu`
+- Timings (ms): open 2, decode 40, preprocess -, orientation 12, probe 8, normalize 55, cache 1, metric-prepare 30, search 9000, write 4, total 9152, backpressure wait 310
+- Warnings: nothing scored at least 80.0 while staying smaller than the original; the original is left as it is
+
+| Codec | Settings | Size | Quality | SSIM2 | Butter | Score backend | Cache source | Preprocess ms | Score ms | Total ms | Status |
+|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|
+| Jpeg | q92/e0 | 31000 | 77.9 | 77.9 | - | cpu | fresh | - | - | 400 | Rejected("quality 77.9 below 80.0") |
+
+## photos/harbour-2.jpg
+
+- Report schema: 6; scoring: `score-snapshot`
+- Original: 1000000 bytes
+- Dimensions: 3000x2000
+- Classification: `Photo`
+- Decoded Color: `Rgb8`
+- Source Color: `Rgb8`
+- ICC Profile: `3144` bytes
+- Compute: `gpu-wgpu`
+- Timings (ms): open 2, decode 40, preprocess -, orientation 12, probe 8, normalize 55, cache 1, metric-prepare 30, search 9000, write 4, total 9152, backpressure wait 310
+- Warnings: output already exists, left as it is: optimized/harbour-2.avif (pass --overwrite to replace it)
+
+## photos/broken.jpg
+
+- Report schema: 6; scoring: `score-snapshot`
+- Original: 1000000 bytes
+- Compute: `gpu-wgpu`
+- Timings (ms): open 2, decode 40, preprocess -, orientation 12, probe 8, normalize 55, cache 1, metric-prepare 30, search 9000, write 4, total 9152, backpressure wait 310
+- Errors: decoding photos/broken.jpg: the image format could not be determined
+
+**Warning:** could not read part of photos/private: Access is denied.
+**Stage totals (ms):** `ReportStageTotals { source_decode_ms: 160, normalize_ms: 220, search_ms: 36000, encode_ms: 660, candidate_decode_ms: 90, score_ms: 210, cache_ms: 3, external_metric_ms: 200, output_write_ms: 16, total_ms: 36608, gpu_timestamp_ns: Some(1250000) }`
+**Failures:** 1
+**Summary:** 1 improved, 1 kept as they were, 1 skipped, 1 failed
