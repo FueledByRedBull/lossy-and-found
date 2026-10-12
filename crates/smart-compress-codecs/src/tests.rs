@@ -470,7 +470,8 @@ fn process_runner_drains_large_live_output() {
             OsString::from("-Command"),
             OsString::from("[Console]::Out.Write('x' * 100000)"),
         ],
-        Duration::from_secs(10),
+        // PowerShell alone can take over ten seconds to start on a loaded CI runner.
+        Duration::from_secs(60),
     )
     .unwrap();
 
@@ -490,7 +491,8 @@ fn process_runner_starts_tools_in_their_own_folder() {
             OsString::from("-Command"),
             OsString::from("[Console]::Out.Write((Get-Location).Path)"),
         ],
-        Duration::from_secs(10),
+        // PowerShell alone can take over ten seconds to start on a loaded CI runner.
+        Duration::from_secs(60),
     )
     .unwrap();
 
@@ -510,7 +512,8 @@ fn process_runner_returns_structured_exit_failure() {
             OsString::from("-Command"),
             OsString::from("[Console]::Error.WriteLine('useful failure'); exit 7"),
         ],
-        Duration::from_secs(10),
+        // PowerShell alone can take over ten seconds to start on a loaded CI runner.
+        Duration::from_secs(60),
     )
     .unwrap_err();
     let failure = error.downcast_ref::<ProcessFailure>().unwrap();
@@ -544,7 +547,7 @@ fn process_runner_times_out_and_requests_tree_termination() {
 #[cfg(windows)]
 #[test]
 fn process_runner_terminates_spawned_children() {
-    let script = "$child = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 30' -PassThru; [Console]::Out.WriteLine($child.Id); Start-Sleep -Seconds 30";
+    let script = "$child = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 300' -PassThru; [Console]::Out.WriteLine($child.Id); Start-Sleep -Seconds 300";
     let error = run_process(
         Path::new("powershell.exe"),
         &[
@@ -554,7 +557,7 @@ fn process_runner_terminates_spawned_children() {
         ],
         // Long enough for PowerShell to start and print the child id on a
         // slow machine; the script itself sleeps far longer.
-        Duration::from_secs(8),
+        Duration::from_secs(25),
     )
     .unwrap_err();
     let failure = error.downcast_ref::<ProcessFailure>().unwrap();
