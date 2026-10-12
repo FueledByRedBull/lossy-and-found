@@ -2,6 +2,7 @@ use std::{
     fs,
     io::Read,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{Duration, SystemTime},
 };
 
@@ -281,6 +282,15 @@ impl CandidateCache {
 
     /// Marks a new or empty directory as a cache; any other is refused.
     fn ensure_marker(&self) -> Result<()> {
+        // Writing the marker puts a temporary file in the directory first, so a
+        // second worker checking meanwhile would see a non-empty directory with
+        // no marker and refuse it. One process marks one directory at a time.
+        // ponytail: a process-wide lock; two processes starting on the same new
+        // directory can still collide, and the loser only skips that one store.
+        static MARKING: Mutex<()> = Mutex::new(());
+        let _marking = MARKING
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if self.has_marker() {
             return Ok(());
         }
@@ -512,6 +522,22 @@ mod tests {
         // Storing refuses it too, and does not mark it.
         assert!(test_cache(dir.path()).ensure_marker().is_err());
         assert!(!dir.path().join(MARKER_NAME).exists());
+    }
+
+    #[test]
+    fn workers_marking_a_new_directory_at_once_all_succeed() {
+        for _ in 0..50 {
+            let dir = tempfile::tempdir().unwrap();
+            let cache_dir = dir.path().join("cache");
+            std::thread::scope(|scope| {
+                let workers: Vec<_> = (0..8)
+                    .map(|_| scope.spawn(|| test_cache(&cache_dir).ensure_marker()))
+                    .collect();
+                for worker in workers {
+                    worker.join().unwrap().unwrap();
+                }
+            });
+        }
     }
 
     #[test]
