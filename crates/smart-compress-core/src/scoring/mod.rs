@@ -1,7 +1,7 @@
 use std::sync::mpsc;
 
-use image::{DynamicImage, RgbaImage};
-use smart_compress_metrics::{MetricError, QualityScore};
+use image::RgbaImage;
+use smart_compress_metrics::QualityScore;
 
 use crate::gpu::GpuAdapterReport;
 
@@ -18,17 +18,6 @@ pub(crate) use cpu::box_downsample;
 pub use cpu::{CpuRayonBackend, OriginalImage};
 pub use dimensions::FULL_SIZE_METRIC_PIXELS;
 pub(crate) use dimensions::bounded_metric_dimensions;
-
-pub trait ComputeBackend {
-    fn backend_id(&self) -> &'static str;
-
-    fn score_candidate(
-        &self,
-        original: &DynamicImage,
-        candidate: &DynamicImage,
-        has_alpha: bool,
-    ) -> Result<QualityScore, MetricError>;
-}
 
 pub struct GpuWgpuBackend {
     device: wgpu::Device,
@@ -278,25 +267,11 @@ impl ActiveComputeBackend {
             Self::Cpu(_) => None,
         }
     }
-}
 
-impl ComputeBackend for ActiveComputeBackend {
-    fn backend_id(&self) -> &'static str {
+    pub fn backend_id(&self) -> &'static str {
         match self {
             Self::Cpu(cpu) => cpu.backend_id(),
             Self::Gpu(gpu) => gpu.backend_id(),
-        }
-    }
-
-    fn score_candidate(
-        &self,
-        original: &DynamicImage,
-        candidate: &DynamicImage,
-        has_alpha: bool,
-    ) -> Result<QualityScore, MetricError> {
-        match self {
-            Self::Cpu(cpu) => cpu.score_candidate(original, candidate, has_alpha),
-            Self::Gpu(gpu) => gpu.score_candidate(original, candidate, has_alpha),
         }
     }
 }

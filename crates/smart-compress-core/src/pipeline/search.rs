@@ -428,7 +428,7 @@ pub(super) fn describe_inversions(codec: Codec, inversions: &[Inversion]) -> Str
         .join(", ");
     format!(
         "non-monotonic behaviour detected for {}: {details}",
-        format!("{codec:?}").to_ascii_lowercase()
+        codec.name()
     )
 }
 

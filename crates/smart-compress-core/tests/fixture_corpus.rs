@@ -8,7 +8,7 @@ use smart_compress_codecs::Codec;
 use smart_compress_core::{
     AlphaPolicy, CliConfig, CodecSelection, Preset, ReportFormat, TargetPolicy,
     image_probe::{ContentClass, apply_orientation, decode_and_probe, decode_source},
-    scoring::{ComputeBackend, CpuRayonBackend, GpuWgpuBackend, gpu_or_skip},
+    scoring::{CpuRayonBackend, GpuWgpuBackend, gpu_or_skip},
 };
 
 fn fixture_dir() -> PathBuf {

@@ -18,6 +18,17 @@ pub enum Codec {
 }
 
 impl Codec {
+    /// The lowercase name used in messages and `--formats`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Png => "png",
+            Self::Jpeg => "jpeg",
+            Self::Webp => "webp",
+            Self::Avif => "avif",
+            Self::Jxl => "jxl",
+        }
+    }
+
     pub fn extension(self) -> &'static str {
         match self {
             Self::Png => "png",

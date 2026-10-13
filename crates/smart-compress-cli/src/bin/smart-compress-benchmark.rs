@@ -133,7 +133,6 @@ enum MetricArg {
     Auto,
     Ssimulacra2,
     Ssimulacra2Inprocess,
-    #[value(alias = "psnr")]
     Builtin,
 }
 
@@ -146,7 +145,6 @@ enum PresetArg {
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 enum TargetArg {
-    #[value(alias = "modern-web")]
     Web,
     Archive,
     Smallest,
@@ -218,7 +216,7 @@ fn main() -> Result<()> {
         "results": results,
     });
     let text = serde_json::to_string_pretty(&output).context("serializing benchmark report")?;
-    atomic_write(&args.out, text.as_bytes(), false)
+    atomic_write(&args.out, text.as_bytes())
         .with_context(|| format!("writing benchmark report {}", args.out.display()))?;
     println!("{}", args.out.display());
     Ok(())
@@ -321,11 +319,7 @@ fn run_case(
 
 fn candidate_key(report: &ImageReport, index: usize) -> String {
     let candidate = &report.candidates[index];
-    format!(
-        "{} {}",
-        format!("{:?}", candidate.codec).to_ascii_lowercase(),
-        candidate.settings.label()
-    )
+    format!("{} {}", candidate.codec.name(), candidate.settings.label())
 }
 
 fn winner_key(report: &ImageReport) -> String {

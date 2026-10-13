@@ -186,7 +186,7 @@ impl Optimizer {
             return Ok(());
         };
         let rendered = report.render(self.config.report)?;
-        atomic_write(path, rendered.as_bytes(), false)
+        atomic_write(path, rendered.as_bytes())
             .with_context(|| format!("publishing report {}", path.display()))
     }
 

@@ -1,6 +1,6 @@
 # Benchmarking
 
-`smart-compress-benchmark` measures the real optimizer pipeline, including source decoding, normalization, candidate encoding and decoding, scoring, cache activity, search and output publication. Stable microbenchmarks of single kernels remain under Criterion (`cargo bench`); this executable is the source of end-to-end numbers.
+`smart-compress-benchmark` measures the real optimizer pipeline, including source decoding, normalization, candidate encoding and decoding, scoring, cache activity, search and output publication. This executable is the source of end-to-end numbers.
 
 All measured results below were taken on one Windows 11 machine with 16 logical cores, 31 GB of RAM and one discrete GPU, in October 2026, so they show relative changes and orders of magnitude, not what another machine will do. Reproduction commands are in [Reproducing the published numbers](#reproducing-the-published-numbers). Run the harness from the workspace root in release mode, with the encoders installed by `tools/fetch-tools.ps1`:
 

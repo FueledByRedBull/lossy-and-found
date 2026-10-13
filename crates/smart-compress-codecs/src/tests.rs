@@ -16,6 +16,19 @@ use super::{
 };
 
 #[test]
+fn a_codec_name_is_its_lowercase_debug_form() {
+    for codec in [
+        Codec::Png,
+        Codec::Jpeg,
+        Codec::Webp,
+        Codec::Avif,
+        Codec::Jxl,
+    ] {
+        assert_eq!(codec.name(), format!("{codec:?}").to_ascii_lowercase());
+    }
+}
+
+#[test]
 fn a_test_without_its_tools_skips_or_fails_when_tools_are_required() {
     let mut tools = ToolInventory::detect();
     tools.cwebp.enabled = true;

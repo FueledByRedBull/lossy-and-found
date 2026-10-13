@@ -115,7 +115,7 @@ fn codec_for_extension(extension: &str) -> Option<Codec> {
 }
 
 fn codec_name(codec: Codec) -> String {
-    format!("{codec:?}").to_ascii_lowercase()
+    codec.name().to_string()
 }
 
 #[derive(Debug, Clone)]

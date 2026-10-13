@@ -35,17 +35,12 @@ pub struct CachedCandidateMetadata {
     /// BLAKE3 of the candidate these scores belong to.
     pub artifact_blake3: String,
     pub decode_ms: Option<u64>,
-    #[serde(default)]
     pub decode_process_ms: Option<u64>,
-    #[serde(default)]
     pub decode_io_ms: Option<u64>,
-    #[serde(default)]
     pub preprocess_ms: Option<u64>,
-    #[serde(default)]
     pub score_ms: Option<u64>,
     pub quality: QualityScore,
     pub encoded_backend: Option<String>,
-    #[serde(default)]
     pub score_backend: Option<ActualScoreBackend>,
 }
 
@@ -208,12 +203,8 @@ impl CandidateCache {
             file_hash(&artifact.path)? == hash,
             "cache candidate hash changed while publishing"
         );
-        atomic_write(
-            &cache_path.with_extension(HASH_EXTENSION),
-            hash.as_bytes(),
-            false,
-        )
-        .context("writing cache candidate hash")
+        atomic_write(&cache_path.with_extension(HASH_EXTENSION), hash.as_bytes())
+            .context("writing cache candidate hash")
     }
 
     pub fn load_metadata(
@@ -261,7 +252,7 @@ impl CandidateCache {
             })?;
         }
         let text = serde_json::to_string_pretty(metadata).context("serializing cache metadata")?;
-        atomic_write(&metadata_path, text.as_bytes(), false)
+        atomic_write(&metadata_path, text.as_bytes())
             .with_context(|| format!("writing cache metadata {}", metadata_path.display()))
     }
 
@@ -303,7 +294,7 @@ impl CandidateCache {
                 self.dir.display()
             );
         }
-        atomic_write(&self.dir.join(MARKER_NAME), MARKER_TEXT.as_bytes(), false)
+        atomic_write(&self.dir.join(MARKER_NAME), MARKER_TEXT.as_bytes())
             .context("marking the cache directory")
     }
 
@@ -452,35 +443,6 @@ pub(crate) fn file_hash(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn older_quality_cache_metadata_defaults_telemetry() {
-        let metadata = CachedCandidateMetadata {
-            size_bytes: 42,
-            artifact_blake3: String::new(),
-            decode_ms: Some(2),
-            decode_process_ms: None,
-            decode_io_ms: None,
-            preprocess_ms: None,
-            score_ms: None,
-            quality: QualityScore::lossless(),
-            encoded_backend: Some("test".to_string()),
-            score_backend: None,
-        };
-        let mut value = serde_json::to_value(metadata).unwrap();
-        let object = value.as_object_mut().unwrap();
-        object.remove("preprocess_ms");
-        object.remove("score_ms");
-        object.remove("score_backend");
-        object.remove("decode_process_ms");
-        object.remove("decode_io_ms");
-
-        let decoded: CachedCandidateMetadata = serde_json::from_value(value).unwrap();
-
-        assert_eq!(decoded.preprocess_ms, None);
-        assert_eq!(decoded.score_ms, None);
-        assert_eq!(decoded.score_backend, None);
-    }
 
     fn test_cache(dir: &Path) -> CandidateCache {
         CandidateCache {

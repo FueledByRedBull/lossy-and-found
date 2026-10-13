@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use smart_compress_codecs::{Codec, EncodedArtifact, EncoderSettings, ProcessFailure};
 use smart_compress_metrics::QualityScore;
 
@@ -76,28 +76,9 @@ pub struct GpuVerificationReport {
     pub cpu_overall: f32,
     pub gpu_overall: f32,
     pub overall_delta: f32,
-    /// The per-component differences, by component name. Older reports wrote
-    /// them as a list of name and value pairs.
-    #[serde(deserialize_with = "deserialize_component_deltas")]
+    /// The per-component differences, by component name.
     pub component_deltas: BTreeMap<String, f32>,
     pub passed: bool,
-}
-
-fn deserialize_component_deltas<'de, D>(deserializer: D) -> Result<BTreeMap<String, f32>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Deltas {
-        Map(BTreeMap<String, f32>),
-        Pairs(Vec<(String, f32)>),
-    }
-
-    Ok(match Deltas::deserialize(deserializer)? {
-        Deltas::Map(map) => map,
-        Deltas::Pairs(pairs) => pairs.into_iter().collect(),
-    })
 }
 
 impl From<&ProcessFailure> for ProcessFailureSummary {
@@ -125,45 +106,28 @@ pub struct CandidateReport {
     pub size_bytes: Option<u64>,
     pub encode_ms: Option<u64>,
     pub decode_ms: Option<u64>,
-    #[serde(default)]
     pub decode_process_ms: Option<u64>,
-    #[serde(default)]
     pub decode_io_ms: Option<u64>,
-    #[serde(default)]
     pub preprocess_ms: Option<u64>,
-    #[serde(default)]
     pub score_ms: Option<u64>,
-    #[serde(default)]
     pub cache_ms: Option<u64>,
-    #[serde(default)]
     pub external_metric_ms: Option<u64>,
-    #[serde(default)]
     pub gpu_upload_ms: Option<u64>,
-    #[serde(default)]
     pub gpu_transform_ms: Option<u64>,
-    #[serde(default)]
     pub gpu_compute_ms: Option<u64>,
-    #[serde(default)]
     pub gpu_readback_ms: Option<u64>,
     /// GPU-side pass time from timestamp queries, in nanoseconds; unlike the
     /// host-wall `gpu_*_ms` values it is absent when the adapter lacks them.
-    #[serde(default)]
     pub gpu_timestamp_ns: Option<u64>,
-    #[serde(default)]
     pub total_ms: Option<u64>,
     pub quality: Option<QualityScore>,
     pub backend: Option<String>,
-    #[serde(default)]
     pub score_backend: Option<ActualScoreBackend>,
     #[serde(default)]
     pub quality_source: QualitySource,
-    #[serde(default)]
     pub cache_hit_kind: Option<CacheHitKind>,
-    #[serde(default)]
     pub process_failure: Option<ProcessFailureSummary>,
-    #[serde(default)]
     pub gpu_verification: Option<GpuVerificationReport>,
-    #[serde(default)]
     pub influence: Option<CandidateInfluence>,
     #[serde(default)]
     pub bytes: CandidateByteCounters,
@@ -320,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn gpu_verification_deltas_are_a_map_and_older_pairs_still_read() {
+    fn gpu_verification_deltas_are_a_map() {
         let report = GpuVerificationReport {
             tolerance: 0.25,
             cpu_overall: 90.0,
@@ -332,21 +296,6 @@ mod tests {
         let value = serde_json::to_value(&report).unwrap();
         assert_eq!(value["component_deltas"]["rgb"], 0.1_f32);
         assert_eq!(value["component_deltas"]["edge"], 0.2_f32);
-
-        let mut older = value;
-        older["component_deltas"] = serde_json::json!([["rgb", 0.1], ["edge", 0.2]]);
-        let read: GpuVerificationReport = serde_json::from_value(older).unwrap();
-        assert_eq!(read.component_deltas, report.component_deltas);
-    }
-
-    #[test]
-    fn a_score_read_from_an_older_report_calls_the_rgb_agreement_ssim() {
-        let score: QualityScore =
-            serde_json::from_str(r#"{"ssim": 91.5, "edge": 88.0, "overall": 88.0}"#).unwrap();
-        assert_eq!(score.rgb, 91.5);
-        let written = serde_json::to_value(score).unwrap();
-        assert_eq!(written["rgb"], 91.5_f32);
-        assert!(written.get("ssim").is_none());
     }
 
     #[test]

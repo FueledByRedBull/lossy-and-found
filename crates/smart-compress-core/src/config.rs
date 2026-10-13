@@ -41,9 +41,6 @@ impl Preset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TargetPolicy {
-    /// `modern-web`, which an earlier version offered as a separate target with
-    /// the same behaviour, is still read as this.
-    #[serde(alias = "modern-web")]
     Web,
     Archive,
     Smallest,
@@ -199,7 +196,7 @@ impl CodecSelection {
     /// The formats as `--formats` takes them, for messages.
     pub fn names(&self) -> String {
         self.iter()
-            .map(|codec| format!("{codec:?}").to_ascii_lowercase())
+            .map(|codec| codec.name())
             .collect::<Vec<_>>()
             .join(",")
     }
@@ -359,9 +356,7 @@ impl CliConfig {
 pub struct CacheConfig {
     pub enabled: bool,
     pub dir: Option<PathBuf>,
-    #[serde(default)]
     pub max_bytes: Option<u64>,
-    #[serde(default)]
     pub max_age_days: Option<u64>,
 }
 
@@ -377,8 +372,7 @@ pub enum PrimaryMetric {
     /// per image; needs no `ssimulacra2` tool.
     Ssimulacra2Inprocess,
     /// The built-in score: the lowest of the RGB, edge and (with transparency)
-    /// alpha and composite agreements. `psnr` is its earlier name.
-    #[serde(alias = "psnr")]
+    /// alpha and composite agreements.
     Builtin,
 }
 
@@ -402,11 +396,8 @@ pub struct GpuConfig {
     pub required: bool,
     #[serde(default = "default_gpu_backend")]
     pub backend: String,
-    #[serde(default)]
     pub adapter_name: Option<String>,
-    #[serde(default)]
     pub adapter_vendor: Option<u32>,
-    #[serde(default)]
     pub adapter_device: Option<u32>,
     #[serde(default = "default_true")]
     pub prefer_gpu_metrics: bool,
@@ -503,8 +494,6 @@ pub struct FileDefaults {
     pub speed: Option<SpeedPreset>,
     pub search: Option<SearchMode>,
     pub overwrite: Option<bool>,
-    /// `keep_original` is the earlier name.
-    #[serde(alias = "keep_original")]
     pub protect_inputs: Option<bool>,
     pub out_dir: Option<PathBuf>,
     pub recursive: Option<bool>,
@@ -641,18 +630,6 @@ mod tests {
         assert!(
             parse_file_config("[gpu]\nenabled = false\n[defaults]\npreset = \"strict\"").is_ok()
         );
-    }
-
-    #[test]
-    fn the_earlier_names_in_a_config_file_still_read() {
-        let file = parse_file_config(
-            "[defaults]\ntarget = \"modern-web\"\nkeep_original = false\n[metrics]\nprimary = \"psnr\"",
-        )
-        .unwrap();
-        let defaults = file.defaults.unwrap();
-        assert_eq!(defaults.target, Some(TargetPolicy::Web));
-        assert_eq!(defaults.protect_inputs, Some(false));
-        assert_eq!(file.metrics.unwrap().primary, PrimaryMetric::Builtin);
     }
 
     #[test]

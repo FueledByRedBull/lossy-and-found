@@ -34,7 +34,7 @@ use crate::{
     image_probe::{DecodedSource, apply_orientation, icc_profile_mismatch, probe_image},
     memory,
     report::{ImageOutcome, ImageReport, ImageStageTimings},
-    scoring::{ComputeBackend, FULL_SIZE_METRIC_PIXELS, GpuPreparedOriginal, OriginalImage},
+    scoring::{FULL_SIZE_METRIC_PIXELS, GpuPreparedOriginal, OriginalImage},
 };
 
 fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {

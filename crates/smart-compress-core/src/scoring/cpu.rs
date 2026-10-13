@@ -4,17 +4,17 @@ use fast_ssim2::Ssimulacra2Reference;
 use image::{DynamicImage, GenericImageView, RgbaImage};
 use smart_compress_metrics::{MetricError, QualityScore, score_rgba};
 
-use super::{ComputeBackend, dimensions::bounded_metric_dimensions};
+use super::dimensions::bounded_metric_dimensions;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CpuRayonBackend;
 
-impl ComputeBackend for CpuRayonBackend {
-    fn backend_id(&self) -> &'static str {
+impl CpuRayonBackend {
+    pub fn backend_id(&self) -> &'static str {
         "cpu-rayon"
     }
 
-    fn score_candidate(
+    pub fn score_candidate(
         &self,
         original: &DynamicImage,
         candidate: &DynamicImage,
@@ -27,9 +27,7 @@ impl ComputeBackend for CpuRayonBackend {
             has_alpha,
         )
     }
-}
 
-impl CpuRayonBackend {
     /// Same score as `score_candidate`, against an original whose metric
     /// buffer is converted once and shared by every candidate.
     pub fn score_original(

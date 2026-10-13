@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
 
-pub fn atomic_write(path: &Path, bytes: &[u8], no_overwrite: bool) -> Result<()> {
+pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -23,7 +23,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8], no_overwrite: bool) -> Result<()>
         .as_file()
         .sync_all()
         .with_context(|| format!("syncing temporary file for {}", path.display()))?;
-    persist(temporary, path, no_overwrite)
+    persist(temporary, path, false)
 }
 
 pub fn atomic_copy(source: &Path, destination: &Path, no_overwrite: bool) -> Result<u64> {
@@ -64,13 +64,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn atomic_write_replaces_or_refuses_as_requested() {
+    fn atomic_write_replaces_an_existing_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("report.json");
-        atomic_write(&path, b"first", false).unwrap();
-        assert!(atomic_write(&path, b"second", true).is_err());
-        assert_eq!(fs::read(&path).unwrap(), b"first");
-        atomic_write(&path, b"second", false).unwrap();
+        atomic_write(&path, b"first").unwrap();
+        atomic_write(&path, b"second").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"second");
     }
 

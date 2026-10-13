@@ -12,7 +12,7 @@ use crate::{
     candidate_probe::check_candidate,
     image_probe::{decode_image_with_limits, read_pam},
     memory,
-    scoring::{ComputeBackend, CpuRayonBackend, FULL_SIZE_METRIC_PIXELS, OriginalImage},
+    scoring::{CpuRayonBackend, FULL_SIZE_METRIC_PIXELS, OriginalImage},
 };
 
 fn optional_delta(left: Option<f32>, right: Option<f32>) -> f32 {
@@ -303,7 +303,7 @@ impl Optimizer {
                     .path
                     .as_ref()
                     .ok_or_else(|| anyhow!("avifdec is not available"))?;
-                let process = run_decode_command(
+                let process = run_process_threads(
                     tool,
                     &[
                         // The PNG is a lossless temporary read straight back;
@@ -342,7 +342,7 @@ impl Optimizer {
                     .path
                     .as_ref()
                     .ok_or_else(|| anyhow!("djxl not found"))?;
-                let process = run_decode_command(
+                let process = run_process_threads(
                     tool,
                     &[
                         OsString::from(format!("--num_threads={threads}")),
@@ -402,21 +402,7 @@ impl Optimizer {
             memory::external_metric_bytes(pixels.min(FULL_SIZE_METRIC_PIXELS)),
             Some(Instant::now() + timeout),
         )?;
-        let output = run_process(
-            tool,
-            &[
-                original_path.as_os_str().to_os_string(),
-                candidate_path.as_os_str().to_os_string(),
-            ],
-            timeout,
-        )?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        stdout
-            .split_whitespace()
-            .next()
-            .ok_or_else(|| anyhow!("SSIMULACRA2 produced no score"))?
-            .parse::<f32>()
-            .context("parsing SSIMULACRA2 score")
+        run_score_tool(tool, original_path, candidate_path, timeout, "SSIMULACRA2")
     }
 
     fn score_ssimulacra2_in_process(
@@ -455,22 +441,39 @@ impl Optimizer {
             .path
             .as_ref()
             .ok_or_else(|| anyhow!("butteraugli_main not found"))?;
-        let output = run_process(
+        run_score_tool(
             tool,
-            &[
-                original_path.as_os_str().to_os_string(),
-                candidate_path.as_os_str().to_os_string(),
-            ],
+            original_path,
+            candidate_path,
             self.config.candidate_timeout(),
-        )?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        stdout
-            .split_whitespace()
-            .next()
-            .ok_or_else(|| anyhow!("Butteraugli produced no score"))?
-            .parse::<f32>()
-            .context("parsing Butteraugli score")
+            "Butteraugli",
+        )
     }
+}
+
+/// Runs an external metric tool on two files and reads the first number it prints.
+fn run_score_tool(
+    tool: &Path,
+    original_path: &Path,
+    candidate_path: &Path,
+    timeout: std::time::Duration,
+    name: &str,
+) -> Result<f32> {
+    let output = run_process(
+        tool,
+        &[
+            original_path.as_os_str().to_os_string(),
+            candidate_path.as_os_str().to_os_string(),
+        ],
+        timeout,
+    )?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| anyhow!("{name} produced no score"))?
+        .parse::<f32>()
+        .with_context(|| format!("parsing {name} score"))
 }
 
 /// The perceptual score replaces the PSNR-derived one; the alpha-channel checks
@@ -542,13 +545,4 @@ pub(super) fn bounded_metric_image(image: &image::DynamicImage) -> Cow<'_, image
     } else {
         image::DynamicImage::ImageRgb8(image::DynamicImage::ImageRgba8(mosaic).to_rgb8())
     })
-}
-
-fn run_decode_command(
-    executable: &Path,
-    args: &[OsString],
-    timeout: std::time::Duration,
-    threads: usize,
-) -> Result<smart_compress_codecs::ProcessOutput> {
-    run_process_threads(executable, args, timeout, threads)
 }

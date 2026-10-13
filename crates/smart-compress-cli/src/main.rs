@@ -113,26 +113,6 @@ struct Args {
     )]
     protect_inputs: Option<bool>,
 
-    /// The former form of --overwrite, inverted: `--no-overwrite false`.
-    #[arg(
-        long,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        hide = true
-    )]
-    no_overwrite: Option<bool>,
-
-    /// The former name of --protect-inputs.
-    #[arg(
-        long,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        hide = true
-    )]
-    keep_original: Option<bool>,
-
     /// Read settings from this TOML file. Options given here override the file.
     #[arg(long, value_name = "FILE", help_heading = INPUT_OUTPUT)]
     config: Option<PathBuf>,
@@ -385,42 +365,6 @@ struct Args {
     gui_port: u16,
 }
 
-impl Args {
-    /// Parses a command line. `--no-overwrite`, `--keep-original` and
-    /// `--allow-larger` used to take their value as the next argument
-    /// (`--no-overwrite false`); that spelling still works, and the value is
-    /// joined to the flag first. A switch now takes a value only as `--flag=value`,
-    /// so `--allow-larger photo.jpg` means what it says.
-    fn try_parse_args<I, T>(args: I) -> Result<Self, clap::Error>
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString>,
-    {
-        const WITH_SEPARATE_VALUE: [&str; 3] =
-            ["--no-overwrite", "--keep-original", "--allow-larger"];
-        let mut joined = Vec::new();
-        let mut args = args.into_iter().map(Into::into).peekable();
-        while let Some(arg) = args.next() {
-            let value_follows = arg
-                .to_str()
-                .is_some_and(|flag| WITH_SEPARATE_VALUE.contains(&flag))
-                && args
-                    .peek()
-                    .and_then(|next| next.to_str())
-                    .is_some_and(|next| matches!(next, "true" | "false"));
-            if value_follows {
-                let mut flag = arg;
-                flag.push("=");
-                flag.push(args.next().expect("peeked"));
-                joined.push(flag);
-            } else {
-                joined.push(arg);
-            }
-        }
-        Self::try_parse_from(joined)
-    }
-}
-
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum PresetArg {
     /// Floor 90 on SSIMULACRA2 (88 on the built-in score): visually lossless.
@@ -435,7 +379,6 @@ enum PresetArg {
 enum TargetArg {
     /// JPEG, WebP, AVIF and PNG. A more widely supported format wins over one up
     /// to 10% smaller (strict), 5% (balanced) or 0% (aggressive).
-    #[value(alias = "modern-web")]
     Web,
     /// For keeping: JPEG XL replaces JPEG.
     Archive,
@@ -455,7 +398,6 @@ enum MetricArg {
     Ssimulacra2Inprocess,
     /// The built-in score (faster, less accurate): the lowest of the RGB, edge
     /// and, with transparency, alpha agreement.
-    #[value(alias = "psnr")]
     Builtin,
 }
 
@@ -502,7 +444,7 @@ enum SpeedArg {
 }
 
 fn main() -> Result<()> {
-    let args = Args::try_parse_args(std::env::args_os()).unwrap_or_else(|error| error.exit());
+    let args = Args::parse();
     smart_compress_codecs::clear_cancel();
     if args.gui || args.gui_window || args.gui_no_open {
         // The panel has its own Cancel; Ctrl+C keeps its default of stopping the server.
@@ -567,9 +509,9 @@ fn publish_report(
     format: ReportFormat,
     report_out: Option<&Path>,
 ) -> Result<()> {
-    let rendered = render_report(report, format)?;
+    let rendered = report.render(format)?;
     if let Some(path) = report_out {
-        atomic_write(path, rendered.as_bytes(), false)
+        atomic_write(path, rendered.as_bytes())
             .with_context(|| format!("writing report {}", path.display()))?;
     } else {
         print!("{rendered}");
@@ -601,10 +543,10 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
     config.out_dir = args.out_dir.or(config.out_dir);
     config.recursive |= args.recursive;
     config.dry_run = args.dry_run;
-    if let Some(overwrite) = args.overwrite.or(args.no_overwrite.map(|no| !no)) {
+    if let Some(overwrite) = args.overwrite {
         config.overwrite = overwrite;
     }
-    if let Some(protect_inputs) = args.protect_inputs.or(args.keep_original) {
+    if let Some(protect_inputs) = args.protect_inputs {
         config.protect_inputs = protect_inputs;
     }
     if let Some(preset) = args.preset {
@@ -978,17 +920,6 @@ fn map_report(value: ReportArg) -> ReportFormat {
     }
 }
 
-fn render_report(
-    report: &smart_compress_core::ReportOutput,
-    format: ReportFormat,
-) -> Result<String> {
-    match format {
-        ReportFormat::Text => Ok(report.to_text()),
-        ReportFormat::Json => serde_json::to_string_pretty(report).context("serializing report"),
-        ReportFormat::Markdown => Ok(report.to_markdown()),
-    }
-}
-
 fn map_metadata(value: MetadataArg) -> MetadataPolicy {
     match value {
         MetadataArg::Keep => MetadataPolicy::Keep,
@@ -1127,7 +1058,7 @@ impl ProgressObserver for TerminalProgress {
             bar.set_message(format!(
                 "{} {index}/{total} {} {}",
                 Self::file_label(path),
-                format!("{codec:?}").to_ascii_lowercase(),
+                codec.name(),
                 settings.label()
             ));
         }
@@ -1201,7 +1132,7 @@ mod tests {
         const FILE_CONFIG: &str = r##"
             [defaults]
             preset = "strict"
-            target = "modern-web" # the earlier name of web
+            target = "web"
             min_quality = 93.0
             metadata = "strip"
             alpha = "auto"
@@ -1293,7 +1224,7 @@ mod tests {
                     "--preset",
                     "aggressive",
                     "--target",
-                    "modern-web",
+                    "web",
                     "--formats",
                     "jpeg,webp",
                     "--report",
@@ -1310,8 +1241,7 @@ mod tests {
                     "#123456",
                     "--speed",
                     "fast",
-                    "--no-overwrite",
-                    "false",
+                    "--overwrite",
                     "--max-pixels",
                     "42",
                     "--workers",
@@ -1373,8 +1303,7 @@ mod tests {
                     "#abcdef",
                     "--speed",
                     "exhaustive",
-                    "--no-overwrite",
-                    "true",
+                    "--overwrite=false",
                     "--max-pixels",
                     "84",
                     "--workers",
@@ -1412,7 +1341,7 @@ mod tests {
         ];
 
         for case in cases {
-            let args = Args::try_parse_args(case.argv).unwrap_or_else(|error| {
+            let args = Args::try_parse_from(case.argv).unwrap_or_else(|error| {
                 panic!("{}: failed to parse arguments: {error}", case.name)
             });
             let file_config = case
@@ -1570,7 +1499,7 @@ mod tests {
 
     fn build(argv: &[&str], file_config: Option<&str>) -> Result<CliConfig> {
         let args =
-            Args::try_parse_args(std::iter::once("smart-compress").chain(argv.iter().copied()))
+            Args::try_parse_from(std::iter::once("smart-compress").chain(argv.iter().copied()))
                 .unwrap();
         build_config_with_file(
             args,
@@ -1579,7 +1508,7 @@ mod tests {
     }
 
     #[test]
-    fn overwrite_and_protect_inputs_are_switches_and_the_old_spellings_still_work() {
+    fn overwrite_and_protect_inputs_are_switches() {
         const OVERWRITE_ON: &str = "[defaults]\noverwrite = true";
         const PROTECT_OFF: &str = "[defaults]\nprotect_inputs = false";
         let config = |argv: &[&str], file: Option<&str>| {
@@ -1596,22 +1525,11 @@ mod tests {
         assert!(!config(&["--overwrite=false"], Some(OVERWRITE_ON)).overwrite);
         assert!(!config(&["--protect-inputs=false"], None).protect_inputs);
         assert!(config(&["--protect-inputs"], Some(PROTECT_OFF)).protect_inputs);
-        // The earlier spellings, with the value as a separate argument.
-        assert!(config(&["--no-overwrite", "false"], None).overwrite);
-        assert!(!config(&["--no-overwrite", "true"], Some(OVERWRITE_ON)).overwrite);
-        assert!(!config(&["--no-overwrite"], Some(OVERWRITE_ON)).overwrite);
-        assert!(!config(&["--keep-original", "false"], None).protect_inputs);
-        assert!(config(&["--keep-original", "true"], Some(PROTECT_OFF)).protect_inputs);
-        // The config file's earlier key.
-        let earlier_key = "[defaults]\nkeep_original = false";
-        assert!(!config(&[], Some(earlier_key)).protect_inputs);
-        // The new flag wins over the old one.
-        assert!(config(&["--overwrite", "--no-overwrite"], None).overwrite);
-        // --allow-larger is a switch the same way; its earlier form also works.
+        // --allow-larger is a switch the same way.
         let larger = build(&["--allow-larger", "input.png"], None).unwrap();
         assert!(larger.allow_larger && larger.inputs.len() == 1);
-        assert!(config(&["--allow-larger", "true"], None).allow_larger);
-        assert!(!config(&["--allow-larger", "false"], None).allow_larger);
+        assert!(config(&["--allow-larger=true"], None).allow_larger);
+        assert!(!config(&["--allow-larger=false"], None).allow_larger);
     }
 
     #[test]
@@ -1624,16 +1542,13 @@ mod tests {
     }
 
     #[test]
-    fn the_builtin_metric_and_the_web_target_keep_their_earlier_names() {
-        for name in ["builtin", "psnr"] {
-            let config = build(&["input.png", "--metric", name], None).unwrap();
-            assert_eq!(config.metrics.primary, PrimaryMetric::Builtin);
-            let file = format!("[metrics]\nprimary = \"{name}\"");
-            let config = build(&["input.png"], Some(&file)).unwrap();
-            assert_eq!(config.metrics.primary, PrimaryMetric::Builtin);
-        }
-        let config = build(&["input.png", "--target", "modern-web"], None).unwrap();
-        assert_eq!(config.target, TargetPolicy::Web);
+    fn the_builtin_metric_is_selected_by_flag_and_by_file() {
+        let config = build(&["input.png", "--metric", "builtin"], None).unwrap();
+        assert_eq!(config.metrics.primary, PrimaryMetric::Builtin);
+        let file = "[metrics]
+primary = \"builtin\"";
+        let config = build(&["input.png"], Some(file)).unwrap();
+        assert_eq!(config.metrics.primary, PrimaryMetric::Builtin);
     }
 
     #[test]

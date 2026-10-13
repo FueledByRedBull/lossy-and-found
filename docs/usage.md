@@ -25,8 +25,8 @@ Contents: [Quick start](#quick-start) | [Command line](#command-line) |
 ## Quick start
 
 These commands run from the repository root after
-[building](../README.md#build) and
-[installing the external tools](../README.md#requirements). `optimized` is the
+[building](../README.md#install) and
+[installing the external tools](../README.md#install). `optimized` is the
 output folder; it is ignored by git.
 
 ```powershell
@@ -560,7 +560,7 @@ The top-level object has these members:
 
 | Member | Content |
 |---|---|
-| `schema_version` | `6`. A report with no version counts as version 1; `--validate-report` and `--resume-report` refuse a report from a newer schema. |
+| `schema_version` | `6`. `--validate-report` and `--resume-report` refuse a report with no version or from a newer schema. |
 | `metric_color_space` | The colour space the built-in metric compares in (`srgb-relative-v1`). |
 | `tools` | The external tools found at the start of the run, by name, each with `name`, `version`, `enabled` and `install_hint` (only when missing). Paths are not recorded. |
 | `gpu` | The GPU detection: `status` (`disabled`, `enabled`, `unavailable` or `required-unavailable`), the requested backend and adapter, `selected_adapter` and `available_adapters` (name, vendor, device, type, backend, limits, whether timestamp queries work) and `warnings`. |
@@ -678,7 +678,7 @@ only from the configuration file and from `smart-compress-benchmark
 
 Native PNG and JPEG candidates are always available. Everything else needs an
 external program, installed by `tools/fetch-tools.ps1` (see the
-[README](../README.md#requirements)). At start-up each tool is looked up by name,
+[README](../README.md#install)). At start-up each tool is looked up by name,
 in this order:
 
 1. on `PATH`, using only absolute entries (an empty or relative entry would mean

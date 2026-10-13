@@ -32,7 +32,6 @@ pub struct RunManifest {
     pub expected_inputs: usize,
     pub completed_inputs: usize,
     pub config_fingerprint: String,
-    #[serde(default)]
     pub resume_decision: Option<String>,
 }
 
@@ -56,7 +55,6 @@ pub enum ImageOutcome {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImageStageTimings {
-    #[serde(default)]
     pub source_open_ms: Option<u64>,
     pub source_decode_ms: Option<u64>,
     pub gpu_preprocess_ms: Option<u64>,
@@ -88,21 +86,18 @@ pub struct ReportStageTotals {
     pub total_ms: u64,
     /// Sum of the candidates' GPU timestamp-query time in nanoseconds; `None`
     /// when no candidate had one.
-    #[serde(default)]
     pub gpu_timestamp_ns: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageReport {
     pub input: String,
-    #[serde(default)]
     pub input_identity: Option<String>,
     pub output: Option<String>,
     pub original_size: u64,
     pub saved_bytes: Option<i64>,
     pub probe: Option<ImageProbe>,
     pub gpu_work: Option<GpuWorkEstimate>,
-    #[serde(default)]
     pub gpu_preprocess_backend: Option<String>,
     pub compute_backend: String,
     #[serde(default)]
@@ -111,7 +106,6 @@ pub struct ImageReport {
     /// reports before schema version 6).
     #[serde(default)]
     pub quality_metric: String,
-    #[serde(default)]
     pub min_quality: Option<f32>,
     #[serde(default)]
     pub timings: ImageStageTimings,
@@ -124,29 +118,24 @@ pub struct ImageReport {
     #[serde(default)]
     pub warnings: Vec<String>,
     pub dry_run: bool,
-    #[serde(default)]
     pub search_stop_reason: Option<String>,
     #[serde(default)]
     pub temporary_bytes_current: u64,
     #[serde(default)]
     pub temporary_bytes_peak: u64,
-    #[serde(default)]
     pub temporary_budget_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportOutput {
-    #[serde(default = "unversioned_report_schema_version")]
     pub schema_version: u32,
     /// The color space the built-in metric compares in.
     #[serde(default = "default_metric_color_space")]
     pub metric_color_space: String,
     /// The tools found at the start of the run. Absent from reports before
     /// schema version 6, which carried them in every image.
-    #[serde(default)]
     pub tools: Option<ToolInventory>,
     /// The GPU found at the start of the run, with the warnings of detecting it.
-    #[serde(default)]
     pub gpu: Option<GpuReport>,
     pub reports: Vec<ImageReport>,
     pub failures: usize,
@@ -155,13 +144,7 @@ pub struct ReportOutput {
     pub warnings: Vec<String>,
     #[serde(default)]
     pub stage_totals: ReportStageTotals,
-    #[serde(default)]
     pub manifest: Option<RunManifest>,
-}
-
-/// What a report without a version is: the format before versions were written.
-fn unversioned_report_schema_version() -> u32 {
-    1
 }
 
 /// The color space the built-in metric compares in.
@@ -191,7 +174,7 @@ impl ReportOutput {
             value
                 .get("schema_version")
                 .and_then(serde_json::Value::as_u64)
-                .unwrap_or(1),
+                .context("report has no schema version")?,
         )?;
         serde_json::from_value(value).context("report does not match the report format")
     }
@@ -693,6 +676,7 @@ mod tests {
     #[test]
     fn older_report_defaults_new_manifest_and_timing_fields() {
         let value = serde_json::json!({
+            "schema_version": 1,
             "reports": [],
             "failures": 0
         });
@@ -720,7 +704,9 @@ mod tests {
             "{error}"
         );
 
-        let mut report = ReportOutput::from_json(r#"{"reports": [], "failures": 0}"#).unwrap();
+        let mut report =
+            ReportOutput::from_json(r#"{"schema_version": 1, "reports": [], "failures": 0}"#)
+                .unwrap();
         assert_eq!(report.schema_version, 1);
         report.schema_version = REPORT_SCHEMA_VERSION + 1;
         assert!(report.validate().is_err());
@@ -729,18 +715,26 @@ mod tests {
     }
 
     #[test]
+    fn a_report_without_a_version_is_refused_with_a_clear_message() {
+        let error = ReportOutput::from_json(r#"{"reports": [], "failures": 0}"#)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(error, "report has no schema version");
+    }
+
+    #[test]
     fn a_report_before_the_run_level_fields_still_loads() {
         // Schema 5 carried the tools, the GPU and the metric color space in every
-        // image, and `ssim` and `psnr` for what are now `rgb` and `builtin`.
+        // image.
         let report = ReportOutput::from_json(
             r#"{"schema_version": 5, "failures": 0, "reports": [{
                 "input": "a.jpg", "original_size": 10, "probe": null,
                 "tools": {}, "gpu": {}, "gpu_work": null, "compute_backend": "cpu-rayon",
-                "metric_color_space": "srgb-relative-v1", "quality_metric": "psnr",
+                "metric_color_space": "srgb-relative-v1", "quality_metric": "builtin",
                 "candidates": [{
                     "codec": "jpeg", "settings": "Lossless", "path": null, "size_bytes": 5,
                     "encode_ms": 1, "decode_ms": 1, "backend": null,
-                    "quality": {"ssim": 90.0, "edge": 91.0, "overall": 90.0},
+                    "quality": {"rgb": 90.0, "edge": 91.0, "overall": 90.0},
                     "status": "Accepted", "warnings": []
                 }],
                 "winner_index": null, "errors": [], "dry_run": false,

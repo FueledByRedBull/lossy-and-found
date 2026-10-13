@@ -7,15 +7,29 @@ use smart_compress_metrics::{
 use wgpu::util::DeviceExt;
 
 use super::{
-    ComputeBackend, GPU_METRIC_COMPONENTS, GPU_WORKGROUP_SIZE, GpuDispatchParams, GpuMetricScores,
-    GpuMetricSums, GpuPassTimer, GpuPreparedOriginal, GpuResidentLevel, GpuScoreOutcome,
-    GpuTimingBreakdown, GpuWgpuBackend, add_optional_timing, box_downsample,
+    GPU_METRIC_COMPONENTS, GPU_WORKGROUP_SIZE, GpuDispatchParams, GpuMetricScores, GpuMetricSums,
+    GpuPassTimer, GpuPreparedOriginal, GpuResidentLevel, GpuScoreOutcome, GpuTimingBreakdown,
+    GpuWgpuBackend, add_optional_timing, box_downsample,
     cpu::{OriginalImage, check_dimensions, metric_level},
     device::bind_entry,
     dimensions::bounded_metric_dimensions,
 };
 
 impl GpuWgpuBackend {
+    pub fn backend_id(&self) -> &'static str {
+        "gpu-wgpu"
+    }
+
+    pub fn score_candidate(
+        &self,
+        original: &DynamicImage,
+        candidate: &DynamicImage,
+        has_alpha: bool,
+    ) -> Result<QualityScore, MetricError> {
+        self.score_candidate_with_fallback(original, candidate, has_alpha)
+            .map(|outcome| outcome.quality)
+    }
+
     pub fn score_candidate_prepared_with_timings(
         &self,
         original: &GpuPreparedOriginal,
@@ -426,22 +440,6 @@ impl GpuWgpuBackend {
             );
         }
         Ok(Some(best))
-    }
-}
-
-impl ComputeBackend for GpuWgpuBackend {
-    fn backend_id(&self) -> &'static str {
-        "gpu-wgpu"
-    }
-
-    fn score_candidate(
-        &self,
-        original: &DynamicImage,
-        candidate: &DynamicImage,
-        has_alpha: bool,
-    ) -> Result<QualityScore, MetricError> {
-        self.score_candidate_with_fallback(original, candidate, has_alpha)
-            .map(|outcome| outcome.quality)
     }
 }
 

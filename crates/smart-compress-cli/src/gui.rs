@@ -16,6 +16,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use serde_json::{Value, json};
 use smart_compress_codecs::{Codec, EncoderSettings, ToolInventory, quiet, system_program};
 use smart_compress_core::{Optimizer, ProgressObserver, config::GpuConfig, gpu::detect_gpu};
@@ -116,11 +117,7 @@ impl ProgressObserver for Gui {
     ) {
         if let Some(file) = self.state().files.get_mut(&path.display().to_string()) {
             file.total = file.total.max(total);
-            file.label = format!(
-                "{} {}",
-                format!("{codec:?}").to_ascii_lowercase(),
-                settings.label()
-            );
+            file.label = format!("{} {}", codec.name(), settings.label());
         }
     }
 
@@ -215,42 +212,8 @@ fn accept_connections(listener: &TcpListener, gui: &Arc<Gui>) {
 /// it comes from the operating system's random generator.
 fn random_hex(bytes: usize) -> Result<String> {
     let mut buffer = vec![0_u8; bytes];
-    fill_random(&mut buffer)?;
+    getrandom::fill(&mut buffer).context("reading the system random generator")?;
     Ok(buffer.iter().map(|byte| format!("{byte:02x}")).collect())
-}
-
-#[cfg(windows)]
-fn fill_random(buffer: &mut [u8]) -> Result<()> {
-    #[link(name = "bcrypt")]
-    unsafe extern "system" {
-        fn BCryptGenRandom(
-            algorithm: *mut std::ffi::c_void,
-            buffer: *mut u8,
-            length: u32,
-            flags: u32,
-        ) -> i32;
-    }
-    // BCRYPT_USE_SYSTEM_PREFERRED_RNG
-    let status = unsafe {
-        BCryptGenRandom(
-            std::ptr::null_mut(),
-            buffer.as_mut_ptr(),
-            buffer.len() as u32,
-            2,
-        )
-    };
-    anyhow::ensure!(
-        status == 0,
-        "the system random generator failed ({status:#x})"
-    );
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn fill_random(buffer: &mut [u8]) -> Result<()> {
-    File::open("/dev/urandom")
-        .and_then(|mut random| random.read_exact(buffer))
-        .context("reading the system random generator")
 }
 
 fn tokens_match(given: &str, expected: &str) -> bool {
@@ -832,7 +795,7 @@ fn status(gui: &Gui) -> Value {
 }
 
 fn start_run(gui: &Arc<Gui>, argv: Vec<String>) -> Result<Value> {
-    let args = Args::try_parse_args(std::iter::once("smart-compress".to_string()).chain(argv))
+    let args = Args::try_parse_from(std::iter::once("smart-compress".to_string()).chain(argv))
         .map_err(|error| anyhow::anyhow!(error.render().to_string()))?;
     anyhow::ensure!(!args.gui, "--gui cannot be started from the control panel");
     if let Some(message) = run_utility(&args)? {

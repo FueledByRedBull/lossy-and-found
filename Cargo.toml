@@ -13,9 +13,6 @@ license = "MIT OR Apache-2.0"
 version = "0.1.0"
 description = "Optimizes images by trying several formats and keeping the smallest result that passes a quality floor"
 repository = "https://github.com/FueledByRedBull/lossy-and-found"
-readme = "README.md"
-keywords = ["image", "compression", "optimizer", "jpeg", "avif"]
-categories = ["multimedia::images", "command-line-utilities"]
 # Not the lowest version the code could build with: it uses File::try_lock
 # (1.89), the image crate needs 1.88, and releases from 1.89 to 1.93 were not
 # available to test with. 1.94 is the toolchain the code is built and tested on.
@@ -26,6 +23,7 @@ anyhow = "1.0"
 blake3 = "1.8"
 clap = { version = "4.5", features = ["derive"] }
 comfy-table = "7.2"
+getrandom = { version = "0.4", features = ["std"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 ignore = "0.4"
 indicatif = "0.18"
@@ -35,7 +33,6 @@ serde_json = "1.0"
 tempfile = "3.23"
 thiserror = "2.0"
 toml = "0.9"
-criterion = "0.7"
 fast-ssim2 = { version = "=0.9.0", features = ["rayon"] }
 pollster = "0.4"
 wgpu = "29.0.3"

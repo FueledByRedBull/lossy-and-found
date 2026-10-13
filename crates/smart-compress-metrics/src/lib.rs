@@ -15,20 +15,14 @@ pub enum MetricError {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct QualityScore {
     /// Raw RGB agreement: twice the PSNR over the colour channels, capped at
-    /// 100. Older reports and cache entries call it `ssim`.
-    #[serde(alias = "ssim")]
+    /// 100.
     pub rgb: f32,
-    #[serde(default)]
     pub ssimulacra2: Option<f32>,
-    #[serde(default)]
     pub butteraugli: Option<f32>,
-    #[serde(default)]
     pub alpha: Option<f32>,
-    #[serde(default)]
     pub composite_min: Option<f32>,
     /// Worst local agreement around transparency edges; see
     /// `alpha_edge_similarity`.
-    #[serde(default)]
     pub alpha_edge: Option<f32>,
     pub edge: f32,
     pub overall: f32,
