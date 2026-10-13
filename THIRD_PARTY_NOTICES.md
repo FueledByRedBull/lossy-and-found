@@ -11,7 +11,7 @@ files of each package. The programs are not stored in this repository.
 
 | Package (programs installed) | Version | Licence | Upstream |
 |---|---|---|---|
-| libjxl (`cjxl`, `djxl`, `cjpegli`, `ssimulacra2`, `butteraugli_main`, `jxlinfo`) | 0.11.2 | BSD-3-Clause. The licences of the libraries it contains (brotli, giflib, highway, libjpeg-turbo, libpng, libwebp, sjpeg, skcms, zlib) are installed beside the programs as `LICENSE.*` | https://github.com/libjxl/libjxl/releases/tag/v0.11.2 |
+| libjxl (`cjxl`, `djxl`, `cjpegli`, `ssimulacra2`, `jxlinfo`) | 0.11.2 | BSD-3-Clause. The licences of the libraries it contains (brotli, giflib, highway, libjpeg-turbo, libpng, libwebp, sjpeg, skcms, zlib) are installed beside the programs as `LICENSE.*` | https://github.com/libjxl/libjxl/releases/tag/v0.11.2 |
 | libavif (`avifenc`, `avifdec`) | 1.4.2 | BSD-2-Clause (installed as `LICENSE.libavif`, from the v1.4.2 source tag). The builds embed dav1d 1.5.3 (BSD-2-Clause) and libaom 3.14.1 (BSD-2-Clause with patent grant) | https://github.com/AOMediaCodec/libavif/releases/tag/v1.4.2 |
 | libwebp (`cwebp`, `webpmux`) | 1.6.0 | BSD-3-Clause with patent grant (installed as `LICENSE.libwebp` and `PATENTS.libwebp`, from the v1.6.0 source tag) | https://developers.google.com/speed/webp/download |
 | pngquant (`pngquant`), optional | 2.17.0 | GPL-3.0-or-later (`COPYRIGHT`, shipped in the archive) | https://pngquant.org/ |
@@ -32,8 +32,6 @@ https://github.com/kornelski/pngquant/tree/2.17.0
 
 - `oxipng` (MIT, https://github.com/oxipng/oxipng) re-packs PNG candidates when
   it is found on `PATH`.
-- `cjpeg` (mozjpeg or libjpeg-turbo, https://github.com/mozilla/mozjpeg) is
-  looked for and listed in reports, but no encoder uses it.
 
 ## Rust crates
 

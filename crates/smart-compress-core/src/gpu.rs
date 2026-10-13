@@ -14,7 +14,6 @@ pub enum GpuStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuReport {
     pub status: GpuStatus,
-    pub requested_backend: String,
     pub requested_adapter_name: Option<String>,
     pub requested_adapter_vendor: Option<u32>,
     pub requested_adapter_device: Option<u32>,
@@ -127,7 +126,6 @@ pub fn detect_gpu_with_adapter(config: &GpuConfig) -> (GpuReport, Option<wgpu::A
         return (
             GpuReport {
                 status: GpuStatus::Disabled,
-                requested_backend: config.backend.clone(),
                 requested_adapter_name: config.adapter_name.clone(),
                 requested_adapter_vendor: config.adapter_vendor,
                 requested_adapter_device: config.adapter_device,
@@ -135,19 +133,6 @@ pub fn detect_gpu_with_adapter(config: &GpuConfig) -> (GpuReport, Option<wgpu::A
                 available_adapters: Vec::new(),
                 warnings: vec!["GPU disabled by configuration".to_string()],
             },
-            None,
-        );
-    }
-
-    if config.backend != "wgpu" {
-        return (
-            unavailable(
-                config,
-                format!(
-                    "unsupported GPU backend '{}'; only 'wgpu' is implemented",
-                    config.backend
-                ),
-            ),
             None,
         );
     }
@@ -190,7 +175,6 @@ pub fn detect_gpu_with_adapter(config: &GpuConfig) -> (GpuReport, Option<wgpu::A
     (
         GpuReport {
             status,
-            requested_backend: config.backend.clone(),
             requested_adapter_name: config.adapter_name.clone(),
             requested_adapter_vendor: config.adapter_vendor,
             requested_adapter_device: config.adapter_device,
@@ -200,23 +184,6 @@ pub fn detect_gpu_with_adapter(config: &GpuConfig) -> (GpuReport, Option<wgpu::A
         },
         selected,
     )
-}
-
-fn unavailable(config: &GpuConfig, warning: String) -> GpuReport {
-    GpuReport {
-        status: if config.required {
-            GpuStatus::RequiredUnavailable
-        } else {
-            GpuStatus::Unavailable
-        },
-        requested_backend: config.backend.clone(),
-        requested_adapter_name: config.adapter_name.clone(),
-        requested_adapter_vendor: config.adapter_vendor,
-        requested_adapter_device: config.adapter_device,
-        selected_adapter: None,
-        available_adapters: Vec::new(),
-        warnings: vec![warning],
-    }
 }
 
 /// The one place that decides which adapter is used: enumerates once and

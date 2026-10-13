@@ -290,7 +290,7 @@ pub(super) fn stable_config_text(config: &CliConfig) -> String {
         SearchMode::Predicted => ";search=Predicted",
     };
     format!(
-        "preset={:?};target={:?};formats={:?};report={:?};min_quality={:?};quality_slack={};metadata={:?};alpha={:?};speed={:?};candidate_timeout={:?};max_image_time={:?};max_candidate_attempts={:?};max_temp_bytes={:?};max_run_temp_bytes={:?};max_memory_bytes={:?};workers={};parallelism={:?};allow_larger={};dry_run={};out_dir={:?};out={:?};overwrite={};protect_inputs={};max_input_bytes={};max_pixels={};max_width={};max_height={};max_decoded_bytes={};max_metadata_bytes={};max_bits_per_pixel={};gpu={:?};cache={:?};metrics={:?};verbose={};inputs={:?}{search}",
+        "preset={:?};target={:?};formats={:?};report={:?};min_quality={:?};quality_slack={};metadata={:?};alpha={:?};speed={:?};candidate_timeout={:?};max_image_time={:?};max_candidate_attempts={:?};max_temp_bytes={:?};max_run_temp_bytes={:?};max_memory_bytes={:?};workers={};parallelism={:?};allow_larger={};dry_run={};out_dir={:?};out={:?};overwrite={};protect_inputs={};max_input_bytes={};max_pixels={};max_width={};max_height={};max_decoded_bytes={};max_metadata_bytes={};max_bits_per_pixel={};gpu={:?};cache={:?};metrics={:?};verbose={};recursive={};inputs={:?}{search}",
         config.preset,
         config.target,
         config.formats.iter().collect::<Vec<_>>(),
@@ -325,6 +325,7 @@ pub(super) fn stable_config_text(config: &CliConfig) -> String {
         config.cache,
         config.metrics,
         config.verbose,
+        config.recursive,
         config.inputs,
     )
 }

@@ -150,8 +150,6 @@ command line overrides the same setting in a
 | `--min-quality SCORE` | from the preset | Lowest score, 0 to 100, a candidate may have, on the scale of the metric in use. Replaces the preset's floor. A `--preset` given on the command line also replaces a `min_quality` from a configuration file. |
 | `--quality-slack POINTS` | `0` | Points a score may fall short of the floor and still pass. |
 | `--metric auto\|ssimulacra2\|ssimulacra2-inprocess\|builtin` | `auto` | The score that decides; see [Quality scoring](#quality-scoring). `ssimulacra2-inprocess` computes the SSIMULACRA2 score inside the program, needs no `ssimulacra2` tool, and is not the choice of `auto`. |
-| `--ssimulacra2` | off | The same as `--metric ssimulacra2`: an image fails if the `ssimulacra2` tool is missing. |
-| `--butteraugli` | off | Also require a Butteraugli distance (the `butteraugli_main` tool) to pass. Over a minute per candidate on a large photo. |
 | `--speed fast\|balanced\|exhaustive` | `balanced` | How many settings are tried per format; see [How the search works](#how-the-search-works). |
 | `--search staged\|predicted` | `staged` | Experimental. `predicted` starts each lossy format at a quality estimated from the quality floor, then searches the range that the start's measured error allows, in fewer rounds than the coarse grid of `staged`. It applies to photographs, with `--speed balanced` or `exhaustive`, SSIMULACRA2 scoring and candidates evaluated in parallel; any other image, and a format whose measurements do not fit the estimate, is searched as `staged`. |
 | `--allow-larger[=BOOL]` | false | Accept an output larger than the original. |
@@ -162,8 +160,11 @@ command line overrides the same setting in a
 |---|---|---|
 | `--target web\|archive\|smallest\|max-compat` | `web` | What the output is for, which decides which formats may be used. |
 | `--formats LIST` | `jpeg,webp,avif,png` | Comma-separated formats to try: `jpeg` (or `jpg`), `webp`, `avif`, `jxl`, `png`. The target is applied to this list afterwards. |
-| `--no-avif` | off | Leave AVIF out of the list. |
-| `--allow-jxl` | off | Add JPEG XL to the list. |
+
+To leave AVIF out, name the others: `--formats jpeg,webp,png`. To add JPEG XL to
+the `web` target, name it: `--formats jpeg,webp,avif,png,jxl`. The list replaces the
+default and any `[codecs]` section of a configuration file, so name every format
+you want.
 
 A set of formats that the target empties (for example `--formats webp --target
 max-compat`) is rejected with a message that names the conflict.
@@ -215,7 +216,6 @@ megapixel photo, for example, needs `--max-pixels 200000000`.
 | `--gpu-required` | off | Fail instead of falling back to the CPU when the GPU cannot be used. |
 | `--gpu-adapter-name TEXT` | best hardware GPU | Use the GPU whose name contains this text, ignoring case. Naming a software adapter selects it. |
 | `--gpu-adapter-vendor ID`, `--gpu-adapter-device ID` | none | Use the GPU with this PCI vendor or device id (decimal). |
-| `--gpu-min-pixels N` | `0` | Smallest image, in pixels, scored on the GPU. |
 | `--verify-gpu` | off | Score each candidate on the CPU as well and report where the two differ. Slow; for checking the GPU. |
 
 ### Reports
@@ -554,16 +554,16 @@ per-image time limit and cancellation also end a wait.
 `--report markdown` writes the same information as Markdown; `--report json`
 writes the machine-readable form described next.
 
-### JSON report, schema version 6
+### JSON report, schema version 7
 
 The top-level object has these members:
 
 | Member | Content |
 |---|---|
-| `schema_version` | `6`. `--validate-report` and `--resume-report` refuse a report with no version or from a newer schema. |
+| `schema_version` | `7`. `--validate-report` and `--resume-report` refuse a report with no version or from a newer schema. A report of an older schema is read, and members this version no longer writes are ignored; `--resume-report` skips it, though, because the configuration fingerprint changed. |
 | `metric_color_space` | The colour space the built-in metric compares in (`srgb-relative-v1`). |
 | `tools` | The external tools found at the start of the run, by name, each with `name`, `version`, `enabled` and `install_hint` (only when missing). Paths are not recorded. |
-| `gpu` | The GPU detection: `status` (`disabled`, `enabled`, `unavailable` or `required-unavailable`), the requested backend and adapter, `selected_adapter` and `available_adapters` (name, vendor, device, type, backend, limits, whether timestamp queries work) and `warnings`. |
+| `gpu` | The GPU detection: `status` (`disabled`, `enabled`, `unavailable` or `required-unavailable`), the requested adapter, `selected_adapter` and `available_adapters` (name, vendor, device, type, backend, limits, whether timestamp queries work) and `warnings`. |
 | `reports` | One entry per image, in input order. |
 | `failures` | The number of images with outcome `failed`. |
 | `warnings` | Warnings about the run as a whole, such as a folder that could not be read. |
@@ -595,7 +595,7 @@ Each candidate records:
 | `size_bytes`, `backend` | The encoded size and the encoder that made it. |
 | `status` | `"Accepted"`, or an object with a reason: `{"Rejected": "..."}` (scored below the floor or too large to be worth scoring), `{"Skipped": "..."}` (not evaluated) or `{"Failed": "..."}` (no verdict). |
 | `influence` | `first-passing`, `improved-winner`, `rejected`, `skipped` or `failed`. |
-| `quality` | The scores: `rgb`, `edge`, `alpha`, `composite_min`, `alpha_edge`, `ssimulacra2`, `butteraugli` and `overall` (the one compared with the floor). Members that do not apply are `null`. |
+| `quality` | The scores: `rgb`, `edge`, `alpha`, `composite_min`, `alpha_edge`, `ssimulacra2` and `overall` (the one compared with the floor). Members that do not apply are `null`. |
 | `score_backend`, `quality_source`, `cache_hit_kind` | Where the score was computed (`gpu`, `cpu`, `cpu-fallback` with the reason, or `ssimulacra2-inprocess`), whether it is `fresh` or from the `score-cache`, and which cache entry hit (`encoded-artifact` or `score-metadata`). |
 | `encode_ms`, `decode_ms`, `score_ms`, `external_metric_ms`, `total_ms` and the GPU stage timings | Milliseconds per stage; `gpu_timestamp_ns` is GPU-side time from timestamp queries when supported. |
 | `bytes` | Counters for uploads, temporary output and decoded buffers. |
@@ -671,8 +671,8 @@ and records the per-component differences.
 
 GPU preprocessing of the original (`prefer_gpu_preprocess`) is experimental and
 off by default. It applies only to images above 16 megapixels and is reachable
-only from the configuration file and from `smart-compress-benchmark
---prepared-gpu`.
+only from the configuration file and from `smart-compress-benchmark --modes
+cpu,gpu-prepared`.
 
 ## External tools
 
@@ -703,8 +703,6 @@ optional tools" with an install hint.
 | `oxipng` | Re-packing PNG candidates | PNG candidates are not re-packed |
 | `pngquant` | Palette PNG candidates | No palette candidates |
 | `ssimulacra2` | The deciding score | The built-in score decides, with lower floors |
-| `butteraugli_main` | `--butteraugli` | The option fails the image |
-| `cjpeg` | Looked for and listed in reports; no encoder uses it | Listed as missing; no effect on the result |
 
 ## Control panel
 
@@ -792,12 +790,9 @@ jxl = false
 [gpu]
 enabled = true
 required = false
-backend = "wgpu"
 # adapter_name = "radeon"
 # adapter_vendor = 4098
 # adapter_device = 29822
-prefer_gpu_metrics = true
-min_pixels_for_gpu_metrics = 0
 prefer_gpu_preprocess = false  # experimental
 max_vram_bytes = "auto"        # "auto" or a number of bytes
 verify_gpu = false
@@ -810,8 +805,6 @@ enabled = false
 
 [metrics]
 primary = "auto"             # auto | ssimulacra2 | builtin
-ssimulacra2 = false
-butteraugli = false
 ```
 
 ## Platform notes
@@ -865,7 +858,7 @@ know what changes:
   within what the memory allows.
 - **A format never appears:** check "Missing optional tools" in the report; run
   `powershell -ExecutionPolicy Bypass -File tools/fetch-tools.ps1`. The default
-  `web` target does not try JPEG XL.
+  `web` target does not try JPEG XL; add it with `--formats jpeg,webp,avif,png,jxl`.
 - **Colour-related refusals:** the report names the PNG chunk, ICC profile or CICP
   triple that could not be carried; see
   [Colour, metadata and alpha](#colour-metadata-and-alpha).

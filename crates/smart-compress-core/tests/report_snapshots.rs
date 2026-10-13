@@ -45,9 +45,7 @@ fn tools() -> ToolInventory {
         oxipng: tool("oxipng", true),
         pngquant: tool("pngquant", true),
         cjpegli: tool("cjpegli", true),
-        cjpeg: tool("cjpeg", false),
         ssimulacra2: tool("ssimulacra2", true),
-        butteraugli: tool("butteraugli_main", true),
     }
 }
 
@@ -65,7 +63,6 @@ fn gpu() -> GpuReport {
     };
     GpuReport {
         status: GpuStatus::Enabled,
-        requested_backend: "wgpu".to_string(),
         requested_adapter_name: None,
         requested_adapter_vendor: None,
         requested_adapter_device: None,
@@ -79,7 +76,6 @@ fn scored(overall: f32) -> QualityScore {
     QualityScore {
         rgb: overall + 4.0,
         ssimulacra2: Some(overall),
-        butteraugli: None,
         alpha: None,
         composite_min: None,
         alpha_edge: None,

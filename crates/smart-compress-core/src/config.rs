@@ -381,10 +381,6 @@ pub enum PrimaryMetric {
 pub struct MetricsConfig {
     #[serde(default)]
     pub primary: PrimaryMetric,
-    #[serde(default)]
-    pub ssimulacra2: bool,
-    #[serde(default)]
-    pub butteraugli: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -394,15 +390,9 @@ pub struct GpuConfig {
     pub enabled: bool,
     #[serde(default)]
     pub required: bool,
-    #[serde(default = "default_gpu_backend")]
-    pub backend: String,
     pub adapter_name: Option<String>,
     pub adapter_vendor: Option<u32>,
     pub adapter_device: Option<u32>,
-    #[serde(default = "default_true")]
-    pub prefer_gpu_metrics: bool,
-    #[serde(default = "default_gpu_min_pixels")]
-    pub min_pixels_for_gpu_metrics: u64,
     #[serde(default)]
     pub prefer_gpu_preprocess: bool,
     #[serde(default, deserialize_with = "deserialize_max_vram_bytes")]
@@ -416,12 +406,9 @@ impl Default for GpuConfig {
         Self {
             enabled: true,
             required: false,
-            backend: "wgpu".to_string(),
             adapter_name: None,
             adapter_vendor: None,
             adapter_device: None,
-            prefer_gpu_metrics: true,
-            min_pixels_for_gpu_metrics: default_gpu_min_pixels(),
             prefer_gpu_preprocess: false,
             max_vram_bytes: None,
             verify_gpu: false,
@@ -431,17 +418,6 @@ impl Default for GpuConfig {
 
 fn default_true() -> bool {
     true
-}
-
-fn default_gpu_backend() -> String {
-    "wgpu".to_string()
-}
-
-/// The benchmark matrix found GPU scoring faster than CPU scoring in every
-/// size class, including images of a few thousand pixels, so no image is
-/// routed to the CPU by size.
-fn default_gpu_min_pixels() -> u64 {
-    0
 }
 
 fn deserialize_max_vram_bytes<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
@@ -586,8 +562,6 @@ mod tests {
 
         let gpu = parsed.gpu.unwrap();
         assert!(gpu.enabled);
-        assert_eq!(gpu.backend, "wgpu");
-        assert!(gpu.prefer_gpu_metrics);
         assert!(!gpu.prefer_gpu_preprocess);
         assert_eq!(gpu.max_vram_bytes, None);
     }

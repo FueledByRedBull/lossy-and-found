@@ -14,8 +14,8 @@ Modes are recorded separately:
 
 - `cpu`: GPU disabled.
 - `gpu-metrics`: GPU metric scoring with CPU preprocessing.
-- `gpu-prepared`: GPU metric scoring with the experimental prepared-original path (`--prepared-gpu`).
-- `gpu-verify`: GPU scoring plus the CPU reference pass (`--verify-gpu`).
+- `gpu-prepared`: GPU metric scoring with the experimental prepared-original path.
+- `gpu-verify`: GPU scoring plus the CPU reference pass.
 
 Use separate runs for cold and warm cache. With `--cache-dir`, the harness creates a mode-specific cache and labels run zero `cold` and later runs `warm`. Use `--runs 3` or more before comparing medians. Use `--formats png` (or one codec at a time) to isolate codec families; omit it for the normal mixed search. `--speed fast`, `balanced`, and `exhaustive` measure the search presets.
 
@@ -53,11 +53,11 @@ For batch smoke gates, use at least 30 tiny images and 10 normal images: the pro
 Run `smart-compress-benchmark --help` for the full list. Inputs are files or folders (searched recursively); the output file is `benchmark-results.json` unless `--out` says otherwise.
 
 - `--runs N` repeats the whole run (default 1).
-- `--modes cpu,gpu-metrics,gpu-prepared,gpu-verify` selects the execution modes (repetitions alternate between them); it overrides `--prepared-gpu` and `--verify-gpu`.
+- `--modes cpu,gpu-metrics,gpu-prepared,gpu-verify` selects the execution modes (repetitions alternate between them). Without it the modes are `cpu` and `gpu-metrics`.
 - `--metric auto|ssimulacra2|builtin` is the deciding score.
 - `--preset`, `--speed`, `--target` and `--formats` select the search (defaults `balanced`, `balanced`, `web`, and the default format list).
 - `--cache-dir DIR` enables a mode-specific cache; run zero is labelled `cold`, later runs `warm`.
-- `--gpu-min-pixels`, `--workers` and `--max-pixels` pass through to the optimizer.
+- `--workers` and `--max-pixels` pass through to the optimizer.
 - `--shape files=N,candidates=N,encoder-threads=N,metric-threads=N` overrides the separate uses of `--workers`, to vary one dimension alone (used for the parallelism table below).
 - `--full-reports` embeds every image report instead of one summary row per image.
 - `--generate-corpus DIR`, `--corpus-sizes` and `--corpus-seed` write the synthetic corpus and exit.
@@ -95,7 +95,7 @@ Where the time goes, built-in score, images up to 12 MP: encoding 73% (CPU mode)
 
 What these numbers decided:
 
-- GPU scoring stays the default and there is no size threshold (`--gpu-min-pixels` defaults to 0): the GPU was faster in every size class, including images of a few hundred pixels.
+- GPU scoring stays the default and there is no size threshold (the option that set one defaulted to 0 and has since been removed): the GPU was faster in every size class, including images of a few hundred pixels.
 - Prepared GPU preprocessing stays in the code but is off by default. It was 5% faster than plain GPU scoring at 49.9 MP and 1% slower at 199.8 MP, below the 10% promotion gate, with identical decisions.
 - Further GPU work (buffer reuse, asynchronous completion, GPU-side reduction) is not pursued: with the GPU, scoring is already under 1% of the time. Encoding and, with SSIMULACRA2, the external metric are the costs that matter.
 

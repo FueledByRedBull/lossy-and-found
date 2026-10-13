@@ -68,16 +68,9 @@ struct Args {
     #[arg(long)]
     cache_dir: Option<PathBuf>,
 
-    /// Make the GPU mode keep the original on the GPU (gpu-prepared) instead of
-    /// uploading it for every candidate (gpu-metrics).
-    #[arg(long)]
-    prepared_gpu: bool,
-
-    /// Make the GPU mode check every score against the CPU (gpu-verify).
-    #[arg(long)]
-    verify_gpu: bool,
-
-    /// Execution modes to compare; overrides --prepared-gpu and --verify-gpu.
+    /// Execution modes to compare. Default: cpu,gpu-metrics. gpu-prepared keeps
+    /// the original on the GPU instead of uploading it for every candidate;
+    /// gpu-verify checks every score against the CPU.
     #[arg(long, value_enum, value_delimiter = ',')]
     modes: Vec<Mode>,
 
@@ -85,10 +78,6 @@ struct Args {
     /// score, so backend comparisons are most telling with `builtin`.
     #[arg(long, value_enum, default_value_t = MetricArg::Auto)]
     metric: MetricArg,
-
-    /// Smallest image, in pixels, scored on the GPU (default: the CLI default).
-    #[arg(long)]
-    gpu_min_pixels: Option<u64>,
 
     /// Workers, as for smart-compress (default: the number of logical processors).
     #[arg(long)]
@@ -174,16 +163,7 @@ fn main() -> Result<()> {
     let started_unix_ms = unix_time_ms();
     let command = std::env::args().collect::<Vec<_>>();
     let modes = if args.modes.is_empty() {
-        vec![
-            Mode::Cpu,
-            if args.verify_gpu {
-                Mode::GpuVerify
-            } else if args.prepared_gpu {
-                Mode::GpuPrepared
-            } else {
-                Mode::GpuMetrics
-            },
-        ]
+        vec![Mode::Cpu, Mode::GpuMetrics]
     } else {
         args.modes.clone()
     };
@@ -269,11 +249,7 @@ fn run_case(
     if let Some(max_pixels) = args.max_pixels {
         config.max_pixels = max_pixels;
     }
-    if let Some(min_pixels) = args.gpu_min_pixels {
-        config.gpu.min_pixels_for_gpu_metrics = min_pixels;
-    }
     config.gpu.enabled = mode != Mode::Cpu;
-    config.gpu.prefer_gpu_metrics = true;
     config.gpu.prefer_gpu_preprocess = mode == Mode::GpuPrepared;
     config.gpu.verify_gpu = mode == Mode::GpuVerify;
     if let Some(cache_dir) = &args.cache_dir {

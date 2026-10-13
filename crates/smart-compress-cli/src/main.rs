@@ -135,16 +135,6 @@ struct Args {
     #[arg(long, value_enum, help_heading = QUALITY)]
     metric: Option<MetricArg>,
 
-    /// Score candidates with SSIMULACRA2 (the same as --metric ssimulacra2); an
-    /// image fails if the ssimulacra2 tool is missing.
-    #[arg(long, help_heading = QUALITY)]
-    ssimulacra2: bool,
-
-    /// Also require a Butteraugli distance (the butteraugli_main tool) to pass.
-    /// Very slow: over a minute per candidate on a large photo.
-    #[arg(long, help_heading = QUALITY)]
-    butteraugli: bool,
-
     /// How many settings are tried per format. More effort finds smaller files
     /// and takes longer. Default: balanced.
     #[arg(long, value_enum, help_heading = QUALITY)]
@@ -178,14 +168,6 @@ struct Args {
     /// Default: jpeg,webp,avif,png. The target may add or remove some.
     #[arg(long, value_name = "LIST", help_heading = FORMATS)]
     formats: Option<String>,
-
-    /// Leave AVIF out of the formats.
-    #[arg(long, help_heading = FORMATS)]
-    no_avif: bool,
-
-    /// Add JPEG XL to the formats.
-    #[arg(long, help_heading = FORMATS)]
-    allow_jxl: bool,
 
     /// What to keep of the image's metadata. Default: safe.
     #[arg(long, value_enum, help_heading = METADATA_ALPHA)]
@@ -309,11 +291,6 @@ struct Args {
     /// Use the GPU with this device id (decimal).
     #[arg(long, value_name = "ID", help_heading = GPU)]
     gpu_adapter_device: Option<u32>,
-
-    /// Smallest image, in pixels, scored on the GPU; smaller ones are scored on
-    /// the CPU. Default: 0, any size.
-    #[arg(long, value_name = "PIXELS", help_heading = GPU)]
-    gpu_min_pixels: Option<u64>,
 
     /// Score each candidate on the CPU as well and report where the two differ.
     /// Slow; for checking the GPU.
@@ -560,16 +537,6 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
     if let Some(formats) = args.formats {
         config.formats = parse_codec_list(&formats)?;
     }
-    if args.no_avif {
-        config.formats = smart_compress_core::CodecSelection::new(
-            config.formats.iter().filter(|codec| *codec != Codec::Avif),
-        );
-    }
-    if args.allow_jxl {
-        let mut list = config.formats.iter().collect::<Vec<_>>();
-        list.push(smart_compress_codecs::Codec::Jxl);
-        config.formats = smart_compress_core::CodecSelection::new(list);
-    }
     let requested = config.formats.clone();
     config.formats.apply_target(config.target);
     if config.formats.iter().next().is_none() {
@@ -697,9 +664,6 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
     if let Some(device) = args.gpu_adapter_device {
         config.gpu.adapter_device = Some(device);
     }
-    if let Some(min_pixels) = args.gpu_min_pixels {
-        config.gpu.min_pixels_for_gpu_metrics = min_pixels;
-    }
     if args.verify_gpu {
         config.gpu.verify_gpu = true;
     }
@@ -710,12 +674,6 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
             MetricArg::Ssimulacra2Inprocess => PrimaryMetric::Ssimulacra2Inprocess,
             MetricArg::Builtin => PrimaryMetric::Builtin,
         };
-    }
-    if args.ssimulacra2 {
-        config.metrics.ssimulacra2 = true;
-    }
-    if args.butteraugli {
-        config.metrics.butteraugli = true;
     }
     if args.cache {
         config.cache.enabled = true;
@@ -1116,8 +1074,7 @@ mod tests {
         gpu_required: bool,
         verify_gpu: bool,
         cache_enabled: bool,
-        ssimulacra2: bool,
-        butteraugli: bool,
+        metric: PrimaryMetric,
     }
 
     struct PrecedenceCase {
@@ -1158,8 +1115,7 @@ mod tests {
             dir = "cache"
 
             [metrics]
-            ssimulacra2 = true
-            butteraugli = false
+            primary = "ssimulacra2"
         "##;
 
         let defaults = CliConfig::default();
@@ -1186,8 +1142,7 @@ mod tests {
                     gpu_required: false,
                     verify_gpu: false,
                     cache_enabled: false,
-                    ssimulacra2: false,
-                    butteraugli: false,
+                    metric: PrimaryMetric::Auto,
                 },
             },
             PrecedenceCase {
@@ -1212,8 +1167,7 @@ mod tests {
                     gpu_required: false,
                     verify_gpu: true,
                     cache_enabled: true,
-                    ssimulacra2: true,
-                    butteraugli: false,
+                    metric: PrimaryMetric::Ssimulacra2,
                 },
             },
             PrecedenceCase {
@@ -1250,8 +1204,8 @@ mod tests {
                     "2000000000",
                     "--cpu-only",
                     "--cache",
-                    "--ssimulacra2",
-                    "--butteraugli",
+                    "--metric",
+                    "ssimulacra2-inprocess",
                 ],
                 file_config: None,
                 expected: ExpectedConfig {
@@ -1274,8 +1228,7 @@ mod tests {
                     gpu_required: false,
                     verify_gpu: false,
                     cache_enabled: true,
-                    ssimulacra2: true,
-                    butteraugli: true,
+                    metric: PrimaryMetric::Ssimulacra2Inprocess,
                 },
             },
             PrecedenceCase {
@@ -1311,7 +1264,8 @@ mod tests {
                     "--max-memory-bytes",
                     "3000000000",
                     "--gpu-required",
-                    "--butteraugli",
+                    "--metric",
+                    "builtin",
                 ],
                 file_config: Some(FILE_CONFIG),
                 expected: ExpectedConfig {
@@ -1334,8 +1288,7 @@ mod tests {
                     gpu_required: true,
                     verify_gpu: true,
                     cache_enabled: true,
-                    ssimulacra2: true,
-                    butteraugli: true,
+                    metric: PrimaryMetric::Builtin,
                 },
             },
         ];
@@ -1414,13 +1367,8 @@ mod tests {
                 case.name
             );
             assert_eq!(
-                actual.metrics.ssimulacra2, expected.ssimulacra2,
-                "{}: SSIMULACRA2",
-                case.name
-            );
-            assert_eq!(
-                actual.metrics.butteraugli, expected.butteraugli,
-                "{}: Butteraugli",
+                actual.metrics.primary, expected.metric,
+                "{}: metric",
                 case.name
             );
         }
@@ -1469,19 +1417,26 @@ mod tests {
                     .unwrap();
             build_config_with_file(args, None)
         };
-        for (argv, expected) in [
-            (
-                &["--formats", "webp", "--target", "max-compat"][..],
-                "--formats webp leaves no output format under --target max-compat",
-            ),
-            (
-                &["--formats", "avif", "--no-avif"][..],
-                "no output format is enabled",
-            ),
-        ] {
-            let error = build(&[&["input.png"], argv].concat()).unwrap_err();
-            assert!(error.to_string().starts_with(expected), "{error}");
-        }
+        let error =
+            build(&["input.png", "--formats", "webp", "--target", "max-compat"]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("--formats webp leaves no output format under --target max-compat"),
+            "{error}"
+        );
+        let none = "[codecs]
+png = false
+jpeg = false
+webp = false
+avif = false";
+        let args = Args::try_parse_from(["smart-compress", "input.png"]).unwrap();
+        let error =
+            build_config_with_file(args, Some(parse_file_config(none).unwrap())).unwrap_err();
+        assert!(
+            error.to_string().starts_with("no output format is enabled"),
+            "{error}"
+        );
         assert!(
             build(&[
                 "input.png",

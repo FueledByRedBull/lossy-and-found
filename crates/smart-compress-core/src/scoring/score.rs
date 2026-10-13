@@ -99,7 +99,6 @@ impl GpuWgpuBackend {
             QualityScore {
                 rgb: gpu_scores.rgb,
                 ssimulacra2: None,
-                butteraugli: None,
                 alpha,
                 composite_min,
                 alpha_edge: None,
@@ -477,7 +476,6 @@ fn quality_from_metric_scores(
     QualityScore {
         rgb,
         ssimulacra2: None,
-        butteraugli: None,
         alpha,
         composite_min,
         alpha_edge: None,

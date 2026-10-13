@@ -30,7 +30,7 @@ $packages = @(
     @{ Name = 'libjxl 0.11.2'; Dest = 'libjxl'
        Url = "$gh/libjxl/libjxl/releases/download/v0.11.2/jxl-x64-windows-static.zip"
        Sha256 = '97dc815bdd99ba243d8502050357342cf649251a5df069f8c3daee6828cbe0ce'
-       Files = @('cjxl', 'djxl', 'cjpegli', 'ssimulacra2', 'butteraugli_main', 'jxlinfo' | ForEach-Object { "bin/$_.exe" }) +
+       Files = @('cjxl', 'djxl', 'cjpegli', 'ssimulacra2', 'jxlinfo' | ForEach-Object { "bin/$_.exe" }) +
                @('brotli', 'giflib', 'highway', 'libjpeg-turbo', 'libjxl', 'libpng', 'libwebp', 'sjpeg', 'skcms', 'zlib' | ForEach-Object { "bin/LICENSE.$_" })
        Extra = @() },
     @{ Name = 'libavif 1.4.2'; Dest = 'libavif'
@@ -119,8 +119,7 @@ try {
 
     Write-Host ''
     $summary | ForEach-Object { Write-Host $_ }
-    Write-Host 'Not installed (optional): oxipng (better PNG recompression) - winget install oxipng or https://github.com/oxipng/oxipng/releases;'
-    Write-Host '                          cjpeg (JPEG fallback) - a mozjpeg or libjpeg-turbo build on PATH.'
+    Write-Host 'Not installed (optional): oxipng (better PNG recompression) - winget install oxipng or https://github.com/oxipng/oxipng/releases.'
 } catch {
     [Console]::Error.WriteLine("fetch-tools: $($_.Exception.Message)")
     exit 1

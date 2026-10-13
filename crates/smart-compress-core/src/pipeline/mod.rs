@@ -191,12 +191,11 @@ impl Optimizer {
             .to_hex()
             .to_string();
         let tools = ToolInventory::detect();
-        let use_ssimulacra2 = config.metrics.ssimulacra2
-            || match config.metrics.primary {
-                PrimaryMetric::Auto => tools.ssimulacra2.enabled,
-                PrimaryMetric::Ssimulacra2 | PrimaryMetric::Ssimulacra2Inprocess => true,
-                PrimaryMetric::Builtin => false,
-            };
+        let use_ssimulacra2 = match config.metrics.primary {
+            PrimaryMetric::Auto => tools.ssimulacra2.enabled,
+            PrimaryMetric::Ssimulacra2 | PrimaryMetric::Ssimulacra2Inprocess => true,
+            PrimaryMetric::Builtin => false,
+        };
         let ssimulacra2_in_process = config.metrics.primary == PrimaryMetric::Ssimulacra2Inprocess;
         let min_quality = quality_floor(&config, use_ssimulacra2);
         let out_codec = config
@@ -210,9 +209,7 @@ impl Optimizer {
             Arc::new(cache)
         });
         let (mut gpu, gpu_adapter) = detect_gpu_with_adapter(&config.gpu);
-        let use_gpu_metrics = config.gpu.enabled
-            && config.gpu.prefer_gpu_metrics
-            && matches!(gpu.status, GpuStatus::Enabled);
+        let use_gpu_metrics = config.gpu.enabled && matches!(gpu.status, GpuStatus::Enabled);
         let compute = if let Some(adapter) = gpu_adapter.filter(|_| use_gpu_metrics) {
             match GpuWgpuBackend::from_adapter(adapter, config.gpu.max_vram_bytes) {
                 Ok(backend) => ActiveComputeBackend::Gpu(Box::new(backend)),

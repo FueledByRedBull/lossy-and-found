@@ -18,7 +18,6 @@ pub struct QualityScore {
     /// 100.
     pub rgb: f32,
     pub ssimulacra2: Option<f32>,
-    pub butteraugli: Option<f32>,
     pub alpha: Option<f32>,
     pub composite_min: Option<f32>,
     /// Worst local agreement around transparency edges; see
@@ -33,7 +32,6 @@ impl QualityScore {
         Self {
             rgb: 100.0,
             ssimulacra2: Some(100.0),
-            butteraugli: Some(0.0),
             alpha: Some(100.0),
             composite_min: Some(100.0),
             alpha_edge: Some(100.0),
@@ -84,7 +82,6 @@ pub fn score_rgba(
     Ok(QualityScore {
         rgb,
         ssimulacra2: None,
-        butteraugli: None,
         alpha,
         composite_min,
         alpha_edge: None,

@@ -23,7 +23,7 @@ committed; `samples/photos/` holds stock photos with their sources (see
 - `gpu-large-validation` (`.github/workflows/gpu-large.yml`) is started by hand
   and needs a self-hosted runner labelled `windows` and `gpu`. It fetches the
   tools, runs the ignored large-image test with `SMART_COMPRESS_REQUIRE_GPU` set,
-  then a `--prepared-gpu` benchmark run, and uploads the benchmark JSON. A
+  then a `--modes cpu,gpu-prepared` benchmark run, and uploads the benchmark JSON. A
   GitHub-hosted runner has no GPU and no large image, so it would validate
   nothing.
 
@@ -34,8 +34,8 @@ committed; `samples/photos/` holds stock photos with their sources (see
   line when a tool is missing. A green run on a machine without the tools
   therefore proves less than one with them. Setting
   `SMART_COMPRESS_REQUIRE_TOOLS` (to any value) turns each of those skips into a
-  failure; CI sets it. No test asks for `oxipng`, `cjpeg` or `pngquant`: the
-  script never installs the first two and installs `pngquant` on a best-effort
+  failure; CI sets it. No test asks for `oxipng` or `pngquant`: the
+  script never installs the first and installs `pngquant` on a best-effort
   basis.
 - **GPU.** GPU tests skip with a one-line message on machines without an
   adapter, so a green CI run proves nothing about the GPU path. Setting
@@ -56,13 +56,13 @@ the text, Markdown or JSON report, regenerate them with
 `UPDATE_SNAPSHOTS=1 cargo test -p smart-compress-core --test report_snapshots`
 and review the diff. When the report layout changes in a way readers of old
 reports would notice, bump `REPORT_SCHEMA_VERSION` in
-`crates/smart-compress-core/src/report.rs` (currently 6) and the scoring version
+`crates/smart-compress-core/src/report.rs` (currently 7) and the scoring version
 when scores change meaning.
 
 ## Third-party tools
 
 `tools/fetch-tools.ps1` downloads the official Windows releases of libjxl 0.11.2
-(`cjxl`, `djxl`, `cjpegli`, `ssimulacra2`, `butteraugli_main`, `jxlinfo`),
+(`cjxl`, `djxl`, `cjpegli`, `ssimulacra2`, `jxlinfo`),
 libavif 1.4.2 (`avifenc`, `avifdec`), libwebp 1.6.0 (`cwebp`, `webpmux`) and
 pngquant 2.17.0, verifies each against a pinned SHA-256, and installs only those
 programs and the licence files into the layout the program searches. Run it with

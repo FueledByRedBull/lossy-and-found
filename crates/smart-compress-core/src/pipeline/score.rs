@@ -52,12 +52,7 @@ impl Optimizer {
                 })?
                 .with_context(|| format!("quality metric failed after {reason}"))?
             } else {
-                match (
-                    prepared_original,
-                    self.should_use_gpu_metrics(original)
-                        .then(|| self.compute.as_ref().as_gpu())
-                        .flatten(),
-                ) {
+                match (prepared_original, self.compute.as_ref().as_gpu()) {
                     (Some(prepared_original), Some(gpu)) => {
                         // The unit is back before any CPU fallback asks for its own.
                         let scored = self.on_metric_pool(1, || {
@@ -98,11 +93,7 @@ impl Optimizer {
                         }
                     }
                     _ => {
-                        if let Some(gpu) = self
-                            .should_use_gpu_metrics(original)
-                            .then(|| self.compute.as_ref().as_gpu())
-                            .flatten()
-                        {
+                        if let Some(gpu) = self.compute.as_ref().as_gpu() {
                             let outcome = self
                                 .on_metric_pool(1, || {
                                     gpu.score_original_with_fallback(original, decoded, has_alpha)
@@ -150,7 +141,7 @@ impl Optimizer {
                 quality.alpha_edge = Some(edge);
                 quality.overall = quality.overall.min(edge);
             }
-            if self.config.gpu.verify_gpu && self.should_use_gpu_metrics(original) {
+            if self.config.gpu.verify_gpu && self.compute.as_ref().as_gpu().is_some() {
                 match self.on_metric_pool(self.metric_threads, || {
                     CpuRayonBackend.score_original(original, decoded, has_alpha)
                 })? {
@@ -203,26 +194,18 @@ impl Optimizer {
                 // the built-in score.
                 let run_ssimulacra2 = !self.ssimulacra2_in_process
                     && self.scores_ssimulacra2(decoded.width(), decoded.height());
-                // Both tools read the same pixels, so one PNG serves them. It is
-                // deleted once scored, whatever the outcome.
+                // The PNG is deleted once scored, whatever the outcome.
                 let candidate_png =
                     candidate_dir.join(format!("metric-candidate-{candidate_index}.png"));
                 let _scratch = RemoveOnDrop(&candidate_png);
-                if run_ssimulacra2 || self.config.metrics.butteraugli {
-                    write_metric_png(decoded, &candidate_png)?;
-                }
                 if run_ssimulacra2 {
+                    write_metric_png(decoded, &candidate_png)?;
                     let score = self.score_ssimulacra2(
                         original_path,
                         &candidate_png,
                         u64::from(decoded.width()) * u64::from(decoded.height()),
                     )?;
                     with_ssimulacra2(&mut quality, score);
-                }
-                if self.config.metrics.butteraugli {
-                    let distance = self.score_butteraugli(original_path, &candidate_png)?;
-                    quality.butteraugli = Some(distance);
-                    quality.overall = quality.overall.min(butteraugli_quality(distance));
                 }
                 candidate.external_metric_ms =
                     Some(external_metric_start.elapsed().as_millis() as u64);
@@ -273,11 +256,9 @@ impl Optimizer {
             self.use_ssimulacra2.to_string()
         };
         format!(
-            "{SCORING_VERSION};backend={};ssimulacra2={};butteraugli={};gpu-min-pixels={};gpu-preprocess={}",
+            "{SCORING_VERSION};backend={};ssimulacra2={};gpu-preprocess={}",
             self.compute.backend_id(),
             ssimulacra2,
-            self.config.metrics.butteraugli,
-            self.config.gpu.min_pixels_for_gpu_metrics,
             self.config.gpu.prefer_gpu_preprocess
         )
     }
@@ -432,23 +413,6 @@ impl Optimizer {
         original.set_ssimulacra2_reference(reference);
         Ok(())
     }
-
-    fn score_butteraugli(&self, original_path: &Path, candidate_path: &Path) -> Result<f32> {
-        let tool = self
-            .backend
-            .tools()
-            .butteraugli
-            .path
-            .as_ref()
-            .ok_or_else(|| anyhow!("butteraugli_main not found"))?;
-        run_score_tool(
-            tool,
-            original_path,
-            candidate_path,
-            self.config.candidate_timeout(),
-            "Butteraugli",
-        )
-    }
 }
 
 /// Runs an external metric tool on two files and reads the first number it prints.
@@ -483,10 +447,6 @@ fn with_ssimulacra2(quality: &mut QualityScore, score: f32) {
     quality.overall = score
         .min(quality.alpha.unwrap_or(100.0))
         .min(quality.alpha_edge.unwrap_or(100.0));
-}
-
-fn butteraugli_quality(distance: f32) -> f32 {
-    (100.0 - distance * 10.0).clamp(0.0, 100.0)
 }
 
 /// Deletes a scratch file when dropped.

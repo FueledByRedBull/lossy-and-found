@@ -14,7 +14,7 @@ use crate::{
 
 /// The version of the report format this build writes and reads. A report with
 /// a newer version is rejected; one without a version is version 1.
-pub const REPORT_SCHEMA_VERSION: u32 = 6;
+pub const REPORT_SCHEMA_VERSION: u32 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -361,7 +361,6 @@ impl ReportOutput {
                     Cell::new("Size"),
                     Cell::new("Quality"),
                     Cell::new("SSIM2"),
-                    Cell::new("Butter"),
                     Cell::new("Score backend"),
                     Cell::new("Cache source"),
                     Cell::new("Preprocess ms"),
@@ -388,12 +387,6 @@ impl ReportOutput {
                                 .quality
                                 .and_then(|quality| quality.ssimulacra2)
                                 .map_or("-".to_string(), |quality| format!("{quality:.1}")),
-                        ),
-                        Cell::new(
-                            candidate
-                                .quality
-                                .and_then(|quality| quality.butteraugli)
-                                .map_or("-".to_string(), |distance| format!("{distance:.3}")),
                         ),
                         Cell::new(score_backend_label(candidate.score_backend.as_ref())),
                         Cell::new(cache_hit_label(candidate.cache_hit_kind)),
@@ -548,16 +541,16 @@ impl ReportOutput {
                 let _ = writeln!(output);
                 let _ = writeln!(
                     output,
-                    "| Codec | Settings | Size | Quality | SSIM2 | Butter | Score backend | Cache source | Preprocess ms | Score ms | Total ms | Status |"
+                    "| Codec | Settings | Size | Quality | SSIM2 | Score backend | Cache source | Preprocess ms | Score ms | Total ms | Status |"
                 );
                 let _ = writeln!(
                     output,
-                    "|---|---:|---:|---:|---:|---:|---|---|---:|---:|---:|---|"
+                    "|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|"
                 );
                 for candidate in &report.candidates {
                     let _ = writeln!(
                         output,
-                        "| {:?} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {:?} |",
+                        "| {:?} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {:?} |",
                         candidate.codec,
                         candidate.settings.label(),
                         candidate
@@ -570,10 +563,6 @@ impl ReportOutput {
                             .quality
                             .and_then(|quality| quality.ssimulacra2)
                             .map_or("-".to_string(), |quality| format!("{quality:.1}")),
-                        candidate
-                            .quality
-                            .and_then(|quality| quality.butteraugli)
-                            .map_or("-".to_string(), |distance| format!("{distance:.3}")),
                         score_backend_label(candidate.score_backend.as_ref()),
                         cache_hit_label(candidate.cache_hit_kind),
                         timing_label(candidate.preprocess_ms),
@@ -630,9 +619,7 @@ fn missing_tool_hints(tools: &ToolInventory) -> Vec<(&str, &str)> {
         &tools.oxipng,
         &tools.pngquant,
         &tools.cjpegli,
-        &tools.cjpeg,
         &tools.ssimulacra2,
-        &tools.butteraugli,
     ]
     .into_iter()
     .filter_map(|tool| {
@@ -742,6 +729,62 @@ mod tests {
             }]}"#,
         )
         .unwrap();
+        assert_eq!(report.reports[0].candidates[0].quality.unwrap().rgb, 90.0);
+    }
+
+    #[test]
+    fn a_schema_6_report_with_the_removed_members_still_loads() {
+        let tool = |name: &str| {
+            serde_json::json!({
+                "name": name, "version": null, "enabled": false, "install_hint": null
+            })
+        };
+        let mut tools = serde_json::Map::new();
+        for name in [
+            "cwebp",
+            "webpmux",
+            "avifenc",
+            "avifdec",
+            "cjxl",
+            "djxl",
+            "oxipng",
+            "pngquant",
+            "cjpegli",
+            "cjpeg",
+            "ssimulacra2",
+            "butteraugli",
+        ] {
+            tools.insert(name.to_string(), tool(name));
+        }
+        let value = serde_json::json!({
+            "schema_version": 6, "failures": 0,
+            "tools": tools,
+            "gpu": {
+                "status": "disabled", "requested_backend": "wgpu",
+                "requested_adapter_name": null, "requested_adapter_vendor": null,
+                "requested_adapter_device": null, "selected_adapter": null,
+                "available_adapters": [], "warnings": []
+            },
+            "reports": [{
+                "input": "a.jpg", "original_size": 10, "probe": null,
+                "gpu_work": null, "compute_backend": "cpu-rayon",
+                "quality_metric": "builtin",
+                "candidates": [{
+                    "codec": "jpeg", "settings": "Lossless", "path": null, "size_bytes": 5,
+                    "encode_ms": 1, "decode_ms": 1, "backend": null,
+                    "quality": {
+                        "rgb": 90.0, "ssimulacra2": null, "butteraugli": 0.5,
+                        "edge": 91.0, "overall": 90.0
+                    },
+                    "status": "Accepted", "warnings": []
+                }],
+                "winner_index": null, "errors": [], "dry_run": false,
+                "saved_bytes": null, "output": null
+            }]
+        });
+        let report = ReportOutput::from_json(&value.to_string()).unwrap();
+        assert_eq!(report.schema_version, 6);
+        assert!(report.tools.is_some() && report.gpu.is_some());
         assert_eq!(report.reports[0].candidates[0].quality.unwrap().rgb, 90.0);
     }
 }

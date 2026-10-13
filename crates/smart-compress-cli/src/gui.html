@@ -295,7 +295,6 @@ pre.cmd { margin: 0; padding: 10px 12px; background: var(--bg); border: 1px soli
           <option value="builtin">Built-in score (faster, less accurate)</option>
         </select>
       </label>
-      <label class="check"><input type="checkbox" name="butteraugli" data-flag="--butteraugli" data-kind="switch" data-tool="butteraugli"><span>Also gate on Butteraugli<br><span class="hint">Very slow: over a minute per candidate on large photos.</span></span></label>
       <label class="check"><input type="checkbox" name="allow_larger" data-flag="--allow-larger" data-kind="switch"><span>Accept results larger than the original</span></label>
     </div>
   </details>
@@ -361,7 +360,6 @@ pre.cmd { margin: 0; padding: 10px 12px; background: var(--bg); border: 1px soli
         </select>
       </label>
       <label class="field"><span>Adapter</span><select name="gpu_adapter" data-flag="--gpu-adapter-name" data-default=""><option value="">Automatic</option></select></label>
-      <label class="field"><span>Use the GPU from this many megapixels</span><input type="number" name="gpu_min_pixels" data-flag="--gpu-min-pixels" data-scale="1000000" min="0" step="0.05" placeholder="0"></label>
       <label class="check"><input type="checkbox" name="verify_gpu" data-flag="--verify-gpu" data-kind="switch"><span>Verify every GPU score against the CPU<br><span class="hint">Doubles scoring work; records the differences in the report.</span></span></label>
       <p class="hint" id="gpu-hint"></p>
     </div>
@@ -857,7 +855,6 @@ setInterval(() => { if (!running) api("/api/status").catch(() => {}); }, 30000);
   const tools = info.tools;
   const need = { webp: tools.cwebp.enabled, avif: tools.avifenc.enabled && tools.avifdec.enabled, jxl: tools.cjxl.enabled && tools.djxl.enabled };
   for (const box of $$("[name=fmt]", form)) if (need[box.value] === false) { box.disabled = true; box.parentElement.title = "Encoder not installed"; }
-  for (const box of $$("[data-tool]", form)) if (!tools[box.dataset.tool].enabled) { box.disabled = true; box.checked = false; box.parentElement.title = "Tool not installed"; }
   const adapters = info.gpu.available_adapters || [];
   for (const name of [...new Set(adapters.map((a) => a.name))]) f.gpu_adapter.append(el("option", { value: name, text: name }));
   $("#gpu-hint").textContent = adapters.length ? "Detected: " + adapters.map((a) => a.name + " (" + a.backend + ")").join(", ") + "." : "No GPU adapter detected; scoring runs on the CPU.";

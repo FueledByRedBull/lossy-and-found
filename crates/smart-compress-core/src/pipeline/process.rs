@@ -549,13 +549,6 @@ impl Optimizer {
             );
             return true;
         }
-        if self.config.metrics.butteraugli && !self.backend.tools().butteraugli.enabled {
-            report.errors.push(
-                "Butteraugli metric requested, but butteraugli_main tool is not available"
-                    .to_string(),
-            );
-            return true;
-        }
         false
     }
 
@@ -667,9 +660,7 @@ impl Optimizer {
             Arc::clone(&self.temp_gate),
         );
         let external_metric_prepare_start = Instant::now();
-        let external_metric_original = if (self.use_ssimulacra2 && !self.ssimulacra2_in_process)
-            || self.config.metrics.butteraugli
-        {
+        let external_metric_original = if self.use_ssimulacra2 && !self.ssimulacra2_in_process {
             match &normalized {
                 // Images this size are scored as they are, so a normalized PNG
                 // without metadata already holds the metric original.

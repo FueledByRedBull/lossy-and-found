@@ -31,9 +31,7 @@ pub struct ToolInventory {
     pub oxipng: ToolInfo,
     pub pngquant: ToolInfo,
     pub cjpegli: ToolInfo,
-    pub cjpeg: ToolInfo,
     pub ssimulacra2: ToolInfo,
-    pub butteraugli: ToolInfo,
 }
 
 impl ToolInventory {
@@ -90,20 +88,10 @@ impl ToolInventory {
                 &["--version"],
                 "Install JPEG XL/jpegli tools or place cjpegli.exe under tools/libjxl/bin.",
             ),
-            cjpeg: detect_tool(
-                "cjpeg",
-                &["-version"],
-                "Install mozjpeg/libjpeg tools if you want cjpeg as an emergency JPEG fallback.",
-            ),
             ssimulacra2: detect_tool(
                 "ssimulacra2",
                 &["--help"],
                 "Install JPEG XL tools or place ssimulacra2.exe under tools/libjxl/bin.",
-            ),
-            butteraugli: detect_tool(
-                "butteraugli_main",
-                &["--help"],
-                "Install JPEG XL tools or place butteraugli_main.exe under tools/libjxl/bin.",
             ),
         }
     }
@@ -139,9 +127,7 @@ impl ToolInventory {
             &self.oxipng,
             &self.pngquant,
             &self.cjpegli,
-            &self.cjpeg,
             &self.ssimulacra2,
-            &self.butteraugli,
         ]
         .into_iter()
         .find(|tool| tool.name == name)
@@ -154,7 +140,7 @@ pub(crate) const REQUIRE_TOOLS_ENV: &str = "SMART_COMPRESS_REQUIRE_TOOLS";
 
 /// Test support shared by the unit and integration tests: the tool inventory,
 /// if every tool named in `needed` (by the name the inventory gives it, such
-/// as `cwebp` or `butteraugli_main`) is installed. Otherwise the test skips
+/// as `cwebp` or `ssimulacra2`) is installed. Otherwise the test skips
 /// with one line on stderr naming what is missing, unless
 /// `SMART_COMPRESS_REQUIRE_TOOLS` is set, which fails it.
 #[doc(hidden)]

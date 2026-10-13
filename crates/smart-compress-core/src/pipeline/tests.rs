@@ -671,6 +671,7 @@ fn the_resume_fingerprint_covers_where_and_whether_outputs_are_written() {
             fingerprint(|config| config.out = Some(PathBuf::from("one.webp"))),
         ),
         ("overwrite", fingerprint(|config| config.overwrite = true)),
+        ("recursive", fingerprint(|config| config.recursive = true)),
         (
             "protect_inputs",
             fingerprint(|config| config.protect_inputs = false),
@@ -1021,7 +1022,6 @@ fn only_images_with_a_side_of_8_px_are_scored_by_ssimulacra2() {
     let optimizer = Optimizer::new(CliConfig {
         metrics: crate::config::MetricsConfig {
             primary: PrimaryMetric::Ssimulacra2,
-            ..Default::default()
         },
         ..base_config()
     });
@@ -1034,7 +1034,6 @@ fn only_images_with_a_side_of_8_px_are_scored_by_ssimulacra2() {
     let builtin = Optimizer::new(CliConfig {
         metrics: crate::config::MetricsConfig {
             primary: PrimaryMetric::Builtin,
-            ..Default::default()
         },
         ..base_config()
     });
@@ -1054,7 +1053,6 @@ fn a_tiny_image_reports_the_metric_and_floor_it_was_scored_with() {
         formats: CodecSelection::new([Codec::Png]),
         metrics: crate::config::MetricsConfig {
             primary: PrimaryMetric::Ssimulacra2,
-            ..Default::default()
         },
         ..base_config()
     })
@@ -1430,12 +1428,10 @@ fn cpu_and_gpu_backends_reach_the_same_decisions() {
             // The built-in score is the one the backends compute.
             metrics: crate::config::MetricsConfig {
                 primary: PrimaryMetric::Builtin,
-                ..Default::default()
             },
             ..CliConfig::default()
         };
         config.gpu.enabled = gpu_enabled;
-        config.gpu.min_pixels_for_gpu_metrics = 0;
         let mut summary = Optimizer::new(config).run().unwrap();
         summary.report.reports.remove(0)
     };
@@ -1582,7 +1578,6 @@ fn in_process_ssimulacra2_scores_a_run_without_the_external_tool() {
         formats: CodecSelection::new([Codec::Png]),
         metrics: crate::config::MetricsConfig {
             primary: PrimaryMetric::Ssimulacra2Inprocess,
-            ..Default::default()
         },
         ..base_config()
     });
@@ -1613,10 +1608,7 @@ fn in_process_ssimulacra2_scores_a_run_without_the_external_tool() {
 fn the_scoring_signature_names_the_ssimulacra2_implementation() {
     let signature = |primary| {
         Optimizer::new(CliConfig {
-            metrics: crate::config::MetricsConfig {
-                primary,
-                ..Default::default()
-            },
+            metrics: crate::config::MetricsConfig { primary },
             ..base_config()
         })
         .scoring_signature()

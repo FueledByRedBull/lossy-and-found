@@ -22,15 +22,6 @@ impl Optimizer {
             && image.width() as u64 * image.height() as u64 > FULL_SIZE_METRIC_PIXELS
     }
 
-    pub(super) fn should_use_gpu_metrics(&self, image: &image::DynamicImage) -> bool {
-        // A required GPU overrides the size threshold; routing small images to
-        // CPU would be a silent fallback.
-        self.compute.as_ref().as_gpu().is_some()
-            && (self.config.gpu.required
-                || image.width() as u64 * image.height() as u64
-                    >= self.config.gpu.min_pixels_for_gpu_metrics)
-    }
-
     /// Pixels in the source from its header alone, so memory can be reserved
     /// before the image is decoded. An unreadable header falls back to a guess
     /// from the file size; the decode will report what is wrong with the file.

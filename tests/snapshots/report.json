@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "metric_color_space": "srgb-relative-v1",
   "tools": {
     "cwebp": {
@@ -56,28 +56,15 @@
       "enabled": true,
       "install_hint": null
     },
-    "cjpeg": {
-      "name": "cjpeg",
-      "version": null,
-      "enabled": false,
-      "install_hint": "Install cjpeg to enable this format."
-    },
     "ssimulacra2": {
       "name": "ssimulacra2",
       "version": "ssimulacra2 1.0",
-      "enabled": true,
-      "install_hint": null
-    },
-    "butteraugli": {
-      "name": "butteraugli_main",
-      "version": "butteraugli_main 1.0",
       "enabled": true,
       "install_hint": null
     }
   },
   "gpu": {
     "status": "enabled",
-    "requested_backend": "wgpu",
     "requested_adapter_name": null,
     "requested_adapter_vendor": null,
     "requested_adapter_device": null,
@@ -180,7 +167,6 @@
           "quality": {
             "rgb": 85.4,
             "ssimulacra2": 81.4,
-            "butteraugli": null,
             "alpha": null,
             "composite_min": null,
             "alpha_edge": null,
@@ -281,7 +267,6 @@
           "quality": {
             "rgb": 78.2,
             "ssimulacra2": 74.2,
-            "butteraugli": null,
             "alpha": null,
             "composite_min": null,
             "alpha_edge": null,
@@ -334,7 +319,6 @@
           "quality": {
             "rgb": 87.1,
             "ssimulacra2": 83.1,
-            "butteraugli": null,
             "alpha": null,
             "composite_min": null,
             "alpha_edge": null,
@@ -431,7 +415,6 @@
           "quality": {
             "rgb": 84.6,
             "ssimulacra2": 80.6,
-            "butteraugli": null,
             "alpha": null,
             "composite_min": null,
             "alpha_edge": null,
@@ -579,7 +562,6 @@
           "quality": {
             "rgb": 81.9,
             "ssimulacra2": 77.9,
-            "butteraugli": null,
             "alpha": null,
             "composite_min": null,
             "alpha_edge": null,

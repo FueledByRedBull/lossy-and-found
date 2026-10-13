@@ -27,7 +27,7 @@ jobs:
         run: cargo test -p smart-compress-core --test fixture_corpus gpu_prepared_scores_match_known_large_image -- --ignored --nocapture
       - name: Save validation report metadata
         if: always()
-        run: cargo run --release --bin smart-compress-benchmark -- tests/fixtures --runs 1 --prepared-gpu --out target/gpu-benchmark.json
+        run: cargo run --release --bin smart-compress-benchmark -- tests/fixtures --runs 1 --modes cpu,gpu-prepared --out target/gpu-benchmark.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
