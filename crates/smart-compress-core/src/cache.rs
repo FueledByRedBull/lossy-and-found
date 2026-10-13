@@ -285,7 +285,7 @@ impl CandidateCache {
         // Writing the marker puts a temporary file in the directory first, so a
         // second worker checking meanwhile would see a non-empty directory with
         // no marker and refuse it. One process marks one directory at a time.
-        // ponytail: a process-wide lock; two processes starting on the same new
+        // The lock is process-wide: two processes starting on the same new
         // directory can still collide, and the loser only skips that one store.
         static MARKING: Mutex<()> = Mutex::new(());
         let _marking = MARKING
