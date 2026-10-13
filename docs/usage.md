@@ -149,7 +149,7 @@ command line overrides the same setting in a
 | `--preset strict\|balanced\|aggressive` | `balanced` | How demanding the quality floor is; see [Targets and presets](#targets-and-presets). |
 | `--min-quality SCORE` | from the preset | Lowest score, 0 to 100, a candidate may have, on the scale of the metric in use. Replaces the preset's floor. A `--preset` given on the command line also replaces a `min_quality` from a configuration file. |
 | `--quality-slack POINTS` | `0` | Points a score may fall short of the floor and still pass. |
-| `--metric auto\|ssimulacra2\|builtin` | `auto` | The score that decides; see [Quality scoring](#quality-scoring). |
+| `--metric auto\|ssimulacra2\|ssimulacra2-inprocess\|builtin` | `auto` | The score that decides; see [Quality scoring](#quality-scoring). `ssimulacra2-inprocess` computes the SSIMULACRA2 score inside the program, needs no `ssimulacra2` tool, and is not the choice of `auto`. |
 | `--ssimulacra2` | off | The same as `--metric ssimulacra2`: an image fails if the `ssimulacra2` tool is missing. |
 | `--butteraugli` | off | Also require a Butteraugli distance (the `butteraugli_main` tool) to pass. Over a minute per candidate on a large photo. |
 | `--speed fast\|balanced\|exhaustive` | `balanced` | How many settings are tried per format; see [How the search works](#how-the-search-works). |
@@ -280,6 +280,13 @@ A candidate is accepted when its score plus `--quality-slack` reaches the floor.
 - `ssimulacra2`: SSIMULACRA2, failing the image if the tool is missing. It was
   designed to track human opinion scores. Its bands are 90 visually lossless, 80
   no visible difference side by side at full size, 70 high quality, 50 medium.
+- `ssimulacra2-inprocess` (experimental): the same metric computed inside the
+  program by the `fast-ssim2` crate, with the original prepared once per image.
+  It needs no tool, scores a candidate two to five times faster and uses less
+  memory. On 545 candidates from real runs its scores were within 0.32 points
+  of the tool's (0.01 on average) and every winner was the same file, but on
+  synthetic test images differences of up to 1.2 points were measured and are
+  not yet explained, so `auto` does not choose it.
 - `builtin`: the built-in score, the lowest of an RGB agreement (twice the PSNR
   over the colour channels, capped at 100), an edge agreement of the same kind
   and, for images with transparency, an alpha agreement and a composite
@@ -588,7 +595,7 @@ Each candidate records:
 | `status` | `"Accepted"`, or an object with a reason: `{"Rejected": "..."}` (scored below the floor or too large to be worth scoring), `{"Skipped": "..."}` (not evaluated) or `{"Failed": "..."}` (no verdict). |
 | `influence` | `first-passing`, `improved-winner`, `rejected`, `skipped` or `failed`. |
 | `quality` | The scores: `rgb`, `edge`, `alpha`, `composite_min`, `alpha_edge`, `ssimulacra2`, `butteraugli` and `overall` (the one compared with the floor). Members that do not apply are `null`. |
-| `score_backend`, `quality_source`, `cache_hit_kind` | Where the score was computed (`gpu`, `cpu`, or `cpu-fallback` with the reason), whether it is `fresh` or from the `score-cache`, and which cache entry hit (`encoded-artifact` or `score-metadata`). |
+| `score_backend`, `quality_source`, `cache_hit_kind` | Where the score was computed (`gpu`, `cpu`, `cpu-fallback` with the reason, or `ssimulacra2-inprocess`), whether it is `fresh` or from the `score-cache`, and which cache entry hit (`encoded-artifact` or `score-metadata`). |
 | `encode_ms`, `decode_ms`, `score_ms`, `external_metric_ms`, `total_ms` and the GPU stage timings | Milliseconds per stage; `gpu_timestamp_ns` is GPU-side time from timestamp queries when supported. |
 | `bytes` | Counters for uploads, temporary output and decoded buffers. |
 | `process_failure` | For a failed external process: the program's file name, kind, exit code, message and elapsed time. |

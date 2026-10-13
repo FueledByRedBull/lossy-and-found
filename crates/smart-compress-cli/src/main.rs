@@ -443,6 +443,8 @@ enum MetricArg {
     Auto,
     /// The perceptual SSIMULACRA2 score; needs the ssimulacra2 tool.
     Ssimulacra2,
+    /// The same SSIMULACRA2 score computed inside the program; needs no tool.
+    Ssimulacra2Inprocess,
     /// The built-in score (faster, less accurate): the lowest of the RGB, edge
     /// and, with transparency, alpha agreement.
     #[value(alias = "psnr")]
@@ -746,6 +748,7 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
         config.metrics.primary = match metric {
             MetricArg::Auto => PrimaryMetric::Auto,
             MetricArg::Ssimulacra2 => PrimaryMetric::Ssimulacra2,
+            MetricArg::Ssimulacra2Inprocess => PrimaryMetric::Ssimulacra2Inprocess,
             MetricArg::Builtin => PrimaryMetric::Builtin,
         };
     }
@@ -1547,6 +1550,15 @@ mod tests {
         assert!(larger.allow_larger && larger.inputs.len() == 1);
         assert!(config(&["--allow-larger", "true"], None).allow_larger);
         assert!(!config(&["--allow-larger", "false"], None).allow_larger);
+    }
+
+    #[test]
+    fn the_in_process_ssimulacra2_metric_is_selected_by_flag_and_by_file() {
+        let config = build(&["input.png", "--metric", "ssimulacra2-inprocess"], None).unwrap();
+        assert_eq!(config.metrics.primary, PrimaryMetric::Ssimulacra2Inprocess);
+        let file = "[metrics]\nprimary = \"ssimulacra2-inprocess\"";
+        let config = build(&["input.png"], Some(file)).unwrap();
+        assert_eq!(config.metrics.primary, PrimaryMetric::Ssimulacra2Inprocess);
     }
 
     #[test]

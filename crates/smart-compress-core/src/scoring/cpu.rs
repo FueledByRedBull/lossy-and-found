@@ -1,5 +1,6 @@
 use std::{ops::Deref, sync::OnceLock};
 
+use fast_ssim2::Ssimulacra2Reference;
 use image::{DynamicImage, GenericImageView, RgbaImage};
 use smart_compress_metrics::{MetricError, QualityScore, score_rgba};
 
@@ -47,11 +48,13 @@ impl CpuRayonBackend {
 
 /// A decoded original plus its RGBA forms for the built-in metrics. Each is
 /// converted on first use and shared by every candidate scored against it,
-/// instead of being rebuilt, at full size, for each of them.
+/// instead of being rebuilt, at full size, for each of them. The in-process
+/// SSIMULACRA2 reference is built once, before the candidates, and kept here.
 pub struct OriginalImage {
     image: DynamicImage,
     full: OnceLock<RgbaImage>,
     metric: OnceLock<RgbaImage>,
+    ssimulacra2: OnceLock<Ssimulacra2Reference>,
 }
 
 impl From<DynamicImage> for OriginalImage {
@@ -60,6 +63,7 @@ impl From<DynamicImage> for OriginalImage {
             image,
             full: OnceLock::new(),
             metric: OnceLock::new(),
+            ssimulacra2: OnceLock::new(),
         }
     }
 }
@@ -75,6 +79,14 @@ impl Deref for OriginalImage {
 impl OriginalImage {
     pub fn full_rgba(&self) -> &RgbaImage {
         self.full.get_or_init(|| self.image.to_rgba8())
+    }
+
+    pub fn ssimulacra2_reference(&self) -> Option<&Ssimulacra2Reference> {
+        self.ssimulacra2.get()
+    }
+
+    pub fn set_ssimulacra2_reference(&self, reference: Ssimulacra2Reference) {
+        let _ = self.ssimulacra2.set(reference);
     }
 
     /// The buffer candidates are compared against: the full one, or its

@@ -34,6 +34,7 @@ use self::batch::stable_config_text;
 mod batch;
 mod evaluate;
 mod guards;
+mod inprocess;
 mod inputs;
 mod output;
 mod plan;
@@ -136,6 +137,8 @@ pub struct Optimizer {
     /// Folders that hold an input, as `fs::canonicalize` names them.
     input_folders: Mutex<HashSet<PathBuf>>,
     use_ssimulacra2: bool,
+    /// SSIMULACRA2 is computed by this program instead of the external tool.
+    ssimulacra2_in_process: bool,
     /// The floor on the scale of the metric in use.
     min_quality: f32,
     /// The format `--out` names by its extension; only it is tried.
@@ -190,9 +193,10 @@ impl Optimizer {
         let use_ssimulacra2 = config.metrics.ssimulacra2
             || match config.metrics.primary {
                 PrimaryMetric::Auto => tools.ssimulacra2.enabled,
-                PrimaryMetric::Ssimulacra2 => true,
+                PrimaryMetric::Ssimulacra2 | PrimaryMetric::Ssimulacra2Inprocess => true,
                 PrimaryMetric::Builtin => false,
             };
+        let ssimulacra2_in_process = config.metrics.primary == PrimaryMetric::Ssimulacra2Inprocess;
         let min_quality = quality_floor(&config, use_ssimulacra2);
         let out_codec = config
             .out
@@ -250,6 +254,7 @@ impl Optimizer {
             ambiguous_outputs: Mutex::new(HashSet::new()),
             input_folders: Mutex::new(HashSet::new()),
             use_ssimulacra2,
+            ssimulacra2_in_process,
             min_quality,
             out_codec,
             run_warnings: Mutex::new(Vec::new()),

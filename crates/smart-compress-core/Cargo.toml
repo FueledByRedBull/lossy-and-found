@@ -15,6 +15,7 @@ publish = false
 anyhow.workspace = true
 blake3.workspace = true
 comfy-table.workspace = true
+fast-ssim2.workspace = true
 image.workspace = true
 ignore.workspace = true
 pollster.workspace = true

@@ -18,7 +18,7 @@ use super::*;
 use super::{
     evaluate::encode_failure,
     plan::{lossless_gate, stage_plan},
-    score::{RemoveOnDrop, bounded_metric_image},
+    score::{RemoveOnDrop, bounded_metric_image, write_metric_png},
     search::{
         Inversion, InversionKind, coarse_followup, held_back_to_run, inversions, neighbour_probes,
         quality_bracket,
@@ -1485,6 +1485,145 @@ fn large_images_are_scored_on_full_resolution_samples() {
 
     let small = DynamicImage::ImageRgb8(RgbImage::new(64, 64));
     assert_eq!(bounded_metric_image(&small).dimensions(), (64, 64));
+}
+
+fn fixture(name: &str) -> DynamicImage {
+    image::open(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures")
+            .join(name),
+    )
+    .unwrap()
+}
+
+#[test]
+fn in_process_ssimulacra2_scores_identical_images_100_and_degraded_ones_lower() {
+    let original = DynamicImage::ImageRgb8(RgbImage::from_fn(64, 64, |x, y| {
+        Rgb([(x * 4) as u8, (y * 4) as u8, ((x * y) % 256) as u8])
+    }));
+    let reference = inprocess::build_reference(&original).unwrap();
+    let same = inprocess::score(&reference, &original).unwrap();
+    let mild = inprocess::score(&reference, &original.blur(1.0)).unwrap();
+    let heavy = inprocess::score(&reference, &original.blur(4.0)).unwrap();
+    assert!(same > 99.99, "{same}");
+    assert!(same > mild && mild > heavy, "{same} {mild} {heavy}");
+}
+
+#[test]
+fn in_process_ssimulacra2_agrees_with_the_external_tool() {
+    /// The two differ by under 0.1 on these cases; the bound leaves room for
+    /// the SIMD rounding of other machines.
+    const TOLERANCE: f32 = 0.25;
+    let Some(tools) = smart_compress_codecs::tools_or_skip(&["ssimulacra2"]) else {
+        return;
+    };
+    let tool = tools.ssimulacra2.path.unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    // Opaque, transparent, flat and busy images.
+    for name in [
+        "photo-like.jpg",
+        "screenshot-like.png",
+        "transparent.png",
+        "noisy.png",
+        "gradient.png",
+    ] {
+        let original = fixture(name);
+        let original_png = dir.path().join("original.png");
+        write_metric_png(&original, &original_png).unwrap();
+        let reference = inprocess::build_reference(&original).unwrap();
+        for candidate in [
+            original.blur(1.0),
+            original.blur(3.0),
+            original.brighten(12),
+        ] {
+            let candidate_png = dir.path().join("candidate.png");
+            write_metric_png(&candidate, &candidate_png).unwrap();
+            let output = smart_compress_codecs::run_process(
+                &tool,
+                &[original_png.clone().into(), candidate_png.into()],
+                std::time::Duration::from_secs(60),
+            )
+            .unwrap();
+            let external: f32 = String::from_utf8_lossy(&output.stdout)
+                .split_whitespace()
+                .next()
+                .unwrap()
+                .parse()
+                .unwrap();
+            let in_process = inprocess::score(&reference, &candidate).unwrap();
+            assert!(
+                (external - in_process).abs() <= TOLERANCE,
+                "{name}: external {external}, in-process {in_process}"
+            );
+        }
+    }
+}
+
+#[test]
+fn in_process_ssimulacra2_scores_a_run_without_the_external_tool() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.png");
+    // Half transparent, so the alpha checks run beside the perceptual score.
+    DynamicImage::ImageRgba8(image::RgbaImage::from_fn(48, 48, |x, y| {
+        image::Rgba([
+            (x * 5) as u8,
+            (y * 5) as u8,
+            90,
+            if x < 24 { 255 } else { 120 },
+        ])
+    }))
+    .save(&input)
+    .unwrap();
+    let mut optimizer = Optimizer::new(CliConfig {
+        inputs: vec![input],
+        out_dir: Some(dir.path().join("out")),
+        formats: CodecSelection::new([Codec::Png]),
+        metrics: crate::config::MetricsConfig {
+            primary: PrimaryMetric::Ssimulacra2Inprocess,
+            ..Default::default()
+        },
+        ..base_config()
+    });
+    let mut tools = ToolInventory::detect();
+    tools.ssimulacra2.enabled = false;
+    tools.ssimulacra2.path = None;
+    optimizer.backend = Arc::new(smart_compress_codecs::EncoderBackend::new(tools));
+    let report = optimizer.run().unwrap().report;
+    let image = &report.reports[0];
+    assert!(image.errors.is_empty(), "{:?}", image.errors);
+    assert_eq!(image.quality_metric, "ssimulacra2");
+    let scored = image
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.quality.is_some())
+        .collect::<Vec<_>>();
+    assert!(!scored.is_empty());
+    for candidate in scored {
+        assert_eq!(
+            candidate.score_backend,
+            Some(ActualScoreBackend::Ssimulacra2Inprocess)
+        );
+        assert!(candidate.quality.unwrap().ssimulacra2.is_some());
+    }
+}
+
+#[test]
+fn the_scoring_signature_names_the_ssimulacra2_implementation() {
+    let signature = |primary| {
+        Optimizer::new(CliConfig {
+            metrics: crate::config::MetricsConfig {
+                primary,
+                ..Default::default()
+            },
+            ..base_config()
+        })
+        .scoring_signature()
+    };
+    let external = signature(PrimaryMetric::Ssimulacra2);
+    let in_process = signature(PrimaryMetric::Ssimulacra2Inprocess);
+    assert!(external.contains(";ssimulacra2=true;"), "{external}");
+    assert!(in_process.contains(inprocess::SIGNATURE), "{in_process}");
+    assert_ne!(external, in_process);
 }
 
 #[test]

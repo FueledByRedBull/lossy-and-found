@@ -22,6 +22,7 @@ pub enum CandidateStatus {
 pub enum ActualScoreBackend {
     Cpu,
     Gpu,
+    Ssimulacra2Inprocess,
     CpuFallback { reason: String },
 }
 

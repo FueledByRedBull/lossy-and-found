@@ -359,6 +359,9 @@ pub enum PrimaryMetric {
     #[default]
     Auto,
     Ssimulacra2,
+    /// SSIMULACRA2 computed inside the program against a reference built once
+    /// per image; needs no `ssimulacra2` tool.
+    Ssimulacra2Inprocess,
     /// The built-in score: the lowest of the RGB, edge and (with transparency)
     /// alpha and composite agreements. `psnr` is its earlier name.
     #[serde(alias = "psnr")]

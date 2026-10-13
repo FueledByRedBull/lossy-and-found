@@ -38,6 +38,19 @@ pub const CANDIDATE_BYTES_PER_PIXEL: u64 = 45;
 /// made 9 GB of a 9.5 GB peak.
 pub const EXTERNAL_METRIC_BYTES_PER_PIXEL: u64 = 150;
 
+/// Memory the in-process SSIMULACRA2 reference holds per pixel of the image it
+/// was built from, for as long as the image is processed: 46 B/px at 3.8, 9.4,
+/// 12 and 16 MP alike (commit after the build, with the build's scratch memory
+/// returned). It is reserved with the image, in the files share, so images
+/// waiting on comparisons never fill the share those comparisons draw from.
+pub const IN_PROCESS_REFERENCE_BYTES_PER_PIXEL: u64 = 48;
+
+/// Memory one in-process SSIMULACRA2 comparison, or the build of a reference,
+/// holds beyond the reference, per pixel of the image it scores: 64, 66, 76 and
+/// 84 B/px at 3.8, 9.4, 12 and 16 MP on two threads, 83 B/px at 12 MP on six,
+/// and six comparisons at once on six threads 66 B/px each.
+pub const IN_PROCESS_METRIC_BYTES_PER_PIXEL: u64 = 96;
+
 /// Memory assumed when the machine will not say how much it has.
 const UNKNOWN_MEMORY_LIMIT: u64 = 8 << 30;
 
@@ -86,7 +99,7 @@ pub struct Shares {
     pub files: u64,
     /// Candidates being encoded, decoded and scored by the built-in metric.
     pub candidates: u64,
-    /// `ssimulacra2` processes.
+    /// `ssimulacra2` processes and in-process SSIMULACRA2 comparisons.
     pub external_metric: u64,
 }
 
@@ -136,6 +149,16 @@ pub fn external_metric_bytes(pixels: u64) -> u64 {
     EXTERNAL_METRIC_BYTES_PER_PIXEL.saturating_mul(pixels)
 }
 
+/// Held by an image for the in-process SSIMULACRA2 reference built from it.
+pub fn in_process_reference_bytes(pixels: u64) -> u64 {
+    IN_PROCESS_REFERENCE_BYTES_PER_PIXEL.saturating_mul(pixels)
+}
+
+/// Held by each in-process SSIMULACRA2 comparison while it runs.
+pub fn in_process_metric_bytes(pixels: u64) -> u64 {
+    IN_PROCESS_METRIC_BYTES_PER_PIXEL.saturating_mul(pixels)
+}
+
 /// How many candidates of an image of `pixels` pixels fit in `limit` bytes,
 /// between one and `workers`.
 pub fn candidate_slots(limit: u64, pixels: u64, workers: usize) -> usize {
@@ -171,6 +194,7 @@ mod tests {
         // Three 12 MP photos at once fit the external metric share of a 31 GB machine.
         let limit = default_memory_limit(Some(31 * GIB));
         assert!(shares(limit).external_metric >= 3 * external_metric_bytes(12 * MP));
+        assert!(shares(limit).external_metric >= 3 * in_process_metric_bytes(12 * MP));
     }
 
     #[test]

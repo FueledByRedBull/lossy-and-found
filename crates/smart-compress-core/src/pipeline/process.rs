@@ -334,9 +334,15 @@ impl Optimizer {
         // The image reserves its memory before it is decoded. One larger than
         // the limit is granted the whole of it, and so runs alone.
         let admission_start = Instant::now();
-        let reserved = self
-            .file_memory
-            .acquire(memory::file_bytes(source_pixels), image_deadline);
+        let reference = if self.ssimulacra2_in_process {
+            memory::in_process_reference_bytes(source_pixels.min(FULL_SIZE_METRIC_PIXELS))
+        } else {
+            0
+        };
+        let reserved = self.file_memory.acquire(
+            memory::file_bytes(source_pixels).saturating_add(reference),
+            image_deadline,
+        );
         waited.fetch_add(
             admission_start.elapsed().as_millis() as u64,
             Ordering::Relaxed,
@@ -527,7 +533,10 @@ impl Optimizer {
             report.outcome = ImageOutcome::DryRun;
             return true;
         }
-        if self.use_ssimulacra2 && !self.backend.tools().ssimulacra2.enabled {
+        if self.use_ssimulacra2
+            && !self.ssimulacra2_in_process
+            && !self.backend.tools().ssimulacra2.enabled
+        {
             report.errors.push(
                 "SSIMULACRA2 metric requested, but ssimulacra2 tool is not available".to_string(),
             );
@@ -650,7 +659,9 @@ impl Optimizer {
             Arc::clone(&self.temp_gate),
         );
         let external_metric_prepare_start = Instant::now();
-        let external_metric_original = if self.use_ssimulacra2 || self.config.metrics.butteraugli {
+        let external_metric_original = if (self.use_ssimulacra2 && !self.ssimulacra2_in_process)
+            || self.config.metrics.butteraugli
+        {
             match &normalized {
                 // Images this size are scored as they are, so a normalized PNG
                 // without metadata already holds the metric original.
@@ -677,6 +688,15 @@ impl Optimizer {
         } else {
             None
         };
+        if self.ssimulacra2_in_process
+            && self.scores_ssimulacra2(original.width(), original.height())
+            && let Err(error) = self.prepare_ssimulacra2_reference(original)
+        {
+            report.errors.push(format!(
+                "preparing the SSIMULACRA2 reference failed: {error:#}"
+            ));
+            return None;
+        }
         report.timings.external_metric_prepare_ms =
             Some(external_metric_prepare_start.elapsed().as_millis() as u64);
         let initial_temp_bytes = directory_bytes(candidate_dir.path());

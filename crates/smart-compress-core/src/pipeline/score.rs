@@ -1,17 +1,18 @@
 use std::{borrow::Cow, collections::BTreeMap, ffi::OsString, fs, path::Path, time::Instant};
 
 use anyhow::{Context, Result, anyhow};
+use fast_ssim2::Ssimulacra2Reference;
 use image::GenericImageView;
-use smart_compress_codecs::{Codec, run_process, run_process_threads};
+use smart_compress_codecs::{Codec, Permit, run_process, run_process_threads};
 use smart_compress_metrics::{QualityScore, alpha_edge_similarity};
 
-use super::{DecodedCandidate, Optimizer, SCORING_VERSION, ScoreDecodedRequest, work};
+use super::{DecodedCandidate, Optimizer, SCORING_VERSION, ScoreDecodedRequest, inprocess, work};
 use crate::{
     candidate::{ActualScoreBackend, CandidateReport, GpuVerificationReport},
     candidate_probe::check_candidate,
     image_probe::{decode_image_with_limits, read_pam},
     memory,
-    scoring::{ComputeBackend, CpuRayonBackend, FULL_SIZE_METRIC_PIXELS},
+    scoring::{ComputeBackend, CpuRayonBackend, FULL_SIZE_METRIC_PIXELS, OriginalImage},
 };
 
 fn optional_delta(left: Option<f32>, right: Option<f32>) -> f32 {
@@ -186,11 +187,22 @@ impl Optimizer {
                         .push(format!("verify-gpu CPU reference failed: {error}")),
                 }
             }
+            if self.ssimulacra2_in_process
+                && self.scores_ssimulacra2(decoded.width(), decoded.height())
+            {
+                let reference = original
+                    .ssimulacra2_reference()
+                    .context("the SSIMULACRA2 reference was not prepared")?;
+                let score = self.score_ssimulacra2_in_process(reference, decoded)?;
+                candidate.score_backend = Some(ActualScoreBackend::Ssimulacra2Inprocess);
+                with_ssimulacra2(&mut quality, score);
+            }
             if let Some(original_path) = external_metric_original {
                 let external_metric_start = Instant::now();
                 // SSIMULACRA2 needs at least an 8x8 image; smaller ones keep
                 // the built-in score.
-                let run_ssimulacra2 = self.scores_ssimulacra2(decoded.width(), decoded.height());
+                let run_ssimulacra2 = !self.ssimulacra2_in_process
+                    && self.scores_ssimulacra2(decoded.width(), decoded.height());
                 // Both tools read the same pixels, so one PNG serves them. It is
                 // deleted once scored, whatever the outcome.
                 let candidate_png =
@@ -205,12 +217,7 @@ impl Optimizer {
                         &candidate_png,
                         u64::from(decoded.width()) * u64::from(decoded.height()),
                     )?;
-                    quality.ssimulacra2 = Some(score);
-                    // The perceptual score replaces the PSNR-derived one; the
-                    // alpha-channel check still guards transparency.
-                    quality.overall = score
-                        .min(quality.alpha.unwrap_or(100.0))
-                        .min(quality.alpha_edge.unwrap_or(100.0));
+                    with_ssimulacra2(&mut quality, score);
                 }
                 if self.config.metrics.butteraugli {
                     let distance = self.score_butteraugli(original_path, &candidate_png)?;
@@ -245,7 +252,11 @@ impl Optimizer {
     /// waits inside `install` or a parallel iterator runs other jobs of its pool
     /// meanwhile: other candidates, which would wait for the units held here by
     /// the very thread they are stacked on.
-    fn on_metric_pool<R: Send>(&self, units: usize, leaf: impl FnOnce() -> R + Send) -> Result<R> {
+    pub(super) fn on_metric_pool<R: Send>(
+        &self,
+        units: usize,
+        leaf: impl FnOnce() -> R + Send,
+    ) -> Result<R> {
         let _units = work(units)?;
         Ok(std::thread::scope(|scope| {
             scope
@@ -256,10 +267,15 @@ impl Optimizer {
     }
 
     pub(super) fn scoring_signature(&self) -> String {
+        let ssimulacra2 = if self.ssimulacra2_in_process {
+            inprocess::SIGNATURE.to_string()
+        } else {
+            self.use_ssimulacra2.to_string()
+        };
         format!(
             "{SCORING_VERSION};backend={};ssimulacra2={};butteraugli={};gpu-min-pixels={};gpu-preprocess={}",
             self.compute.backend_id(),
-            self.use_ssimulacra2,
+            ssimulacra2,
             self.config.metrics.butteraugli,
             self.config.gpu.min_pixels_for_gpu_metrics,
             self.config.gpu.prefer_gpu_preprocess
@@ -403,6 +419,34 @@ impl Optimizer {
             .context("parsing SSIMULACRA2 score")
     }
 
+    fn score_ssimulacra2_in_process(
+        &self,
+        reference: &Ssimulacra2Reference,
+        decoded: &image::DynamicImage,
+    ) -> Result<f32> {
+        let _reserved = self.reserve_in_process_metric(decoded)?;
+        self.on_metric_pool(self.metric_threads, || inprocess::score(reference, decoded))?
+    }
+
+    /// Memory for scoring `image` in this process, from the share the external
+    /// metric draws on.
+    fn reserve_in_process_metric(&self, image: &image::DynamicImage) -> Result<Permit<'_>> {
+        let pixels = u64::from(image.width()) * u64::from(image.height());
+        Ok(self.metric_memory.acquire(
+            memory::in_process_metric_bytes(pixels.min(FULL_SIZE_METRIC_PIXELS)),
+            Some(Instant::now() + self.config.candidate_timeout()),
+        )?)
+    }
+
+    /// Builds the in-process reference of an image and keeps it with the image.
+    pub(super) fn prepare_ssimulacra2_reference(&self, original: &OriginalImage) -> Result<()> {
+        let _reserved = self.reserve_in_process_metric(original)?;
+        let reference =
+            self.on_metric_pool(self.metric_threads, || inprocess::build_reference(original))??;
+        original.set_ssimulacra2_reference(reference);
+        Ok(())
+    }
+
     fn score_butteraugli(&self, original_path: &Path, candidate_path: &Path) -> Result<f32> {
         let tool = self
             .backend
@@ -427,6 +471,15 @@ impl Optimizer {
             .parse::<f32>()
             .context("parsing Butteraugli score")
     }
+}
+
+/// The perceptual score replaces the PSNR-derived one; the alpha-channel checks
+/// still guard transparency.
+fn with_ssimulacra2(quality: &mut QualityScore, score: f32) {
+    quality.ssimulacra2 = Some(score);
+    quality.overall = score
+        .min(quality.alpha.unwrap_or(100.0))
+        .min(quality.alpha_edge.unwrap_or(100.0));
 }
 
 fn butteraugli_quality(distance: f32) -> f32 {

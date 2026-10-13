@@ -616,6 +616,7 @@ fn score_backend_label(backend: Option<&ActualScoreBackend>) -> String {
     match backend {
         Some(ActualScoreBackend::Cpu) => "cpu".to_string(),
         Some(ActualScoreBackend::Gpu) => "gpu".to_string(),
+        Some(ActualScoreBackend::Ssimulacra2Inprocess) => "ssimulacra2-inprocess".to_string(),
         Some(ActualScoreBackend::CpuFallback { reason }) => {
             format!("cpu-fallback ({reason})")
         }

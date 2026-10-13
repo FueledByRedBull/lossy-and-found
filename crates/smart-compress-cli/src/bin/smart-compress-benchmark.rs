@@ -132,6 +132,7 @@ impl Mode {
 enum MetricArg {
     Auto,
     Ssimulacra2,
+    Ssimulacra2Inprocess,
     #[value(alias = "psnr")]
     Builtin,
 }
@@ -258,6 +259,7 @@ fn run_case(
     config.metrics.primary = match args.metric {
         MetricArg::Auto => PrimaryMetric::Auto,
         MetricArg::Ssimulacra2 => PrimaryMetric::Ssimulacra2,
+        MetricArg::Ssimulacra2Inprocess => PrimaryMetric::Ssimulacra2Inprocess,
         MetricArg::Builtin => PrimaryMetric::Builtin,
     };
     if let Some(workers) = args.workers {
