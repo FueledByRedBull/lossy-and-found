@@ -14,7 +14,7 @@ cargo build --release --bins
 ```
 
 The first command downloads the encoder and metric programs the optimizer runs
-into `tools/` (see the [README](README.md#requirements)). They are not stored in
+into `tools/` (see the [README](README.md#install)). They are not stored in
 the repository.
 
 ## Checks

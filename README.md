@@ -1,43 +1,23 @@
 # lossy-and-found
 
 [![ci](https://github.com/FueledByRedBull/lossy-and-found/actions/workflows/ci.yml/badge.svg)](https://github.com/FueledByRedBull/lossy-and-found/actions/workflows/ci.yml)
+[![licence: MIT or Apache-2.0](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#licence)
+[![rust 1.94+](https://img.shields.io/badge/rust-1.94%2B-orange)](Cargo.toml)
 
-**`smart-compress` shrinks JPEG, PNG, WebP and AVIF images to the smallest file
-that still passes a quality check you choose.** It encodes each image with
-several codecs at several settings, measures every result against the original
-with a perceptual metric (SSIMULACRA2), and keeps the smallest one above the
-quality floor. Your original is never overwritten.
+`smart-compress` is an image optimizer that tries several codecs on each JPEG,
+PNG, WebP or AVIF and keeps the smallest file that still passes a perceptual
+quality check.
 
-(The repository is `lossy-and-found`; the program it builds is `smart-compress`.)
+<img src="docs/panel.png" alt="The smart-compress control panel: a drop area for images on the left, quality and format settings on the right" width="820">
 
-```text
-> smart-compress samples\photos\picsum-433-3200x2400.jpg
-Original: 633331 bytes, 3200x2400, Photo, decoded Rgb8, source Rgb8
-[...]
-Winner: Avif q67/e6 -> 455682 bytes
-Output: samples\photos\optimized\picsum-433-3200x2400.avif
-[...]
-Summary: 1 improved, 0 kept as they were, 0 skipped, 0 failed
-```
+You state a quality level; it finds the codec and the quality number. Every
+candidate is decoded and scored against the original with SSIMULACRA2, and your
+original is never overwritten. The price is time: it makes tens of encodes per
+image, so a 12 MP photo takes about half a minute on six cores.
 
-You state a quality level; it finds the codec and the quality number. The price
-is time: it makes tens of encodes per image, so a 12 MP photo takes about half a
-minute on six cores. If nothing smaller passes the check, it writes nothing and
-says so.
-
-![The control panel before any image is added](docs/panel.png)
-
-## Contents
-
-- [What it saves](#what-it-saves)
-- [Get started](#get-started)
-- [Using it](#using-it)
-- [The desktop app](#the-desktop-app)
-- [How it decides](#how-it-decides)
-- [Known limits](#known-limits)
-- [Documentation](#documentation)
-- [Status](#status)
-- [Licence](#licence)
+Pre-release and Windows only: it is tested on Windows 11, and flags and the
+report layout can still change. The repository is `lossy-and-found`; the program
+it builds is `smart-compress`.
 
 ## What it saves
 
@@ -57,9 +37,9 @@ At the strict preset (visually lossless) the six larger ones cannot be made
 smaller at all, and the program leaves them as they are. The full table, the
 method and the timings are in [docs/benchmarking.md](docs/benchmarking.md).
 
-## Get started
+## Install
 
-You need **Windows 11 (x64)** and **Rust 1.94 or newer**. No release binaries are
+You need Windows 11 (x64), Rust 1.94 or newer, and Git. No release binaries are
 published yet, so you build it:
 
 ```powershell
@@ -67,37 +47,52 @@ git clone https://github.com/FueledByRedBull/lossy-and-found
 cd lossy-and-found
 powershell -File tools\fetch-tools.ps1
 cargo build --release --bins
-target\release\smart-compress.exe samples\photos\picsum-433-3200x2400.jpg
 ```
 
-The result lands in an `optimized` folder next to the image.
-
 `tools\fetch-tools.ps1` downloads the encoders the program runs as separate
-processes: the official releases of libjxl 0.11.2 (JPEG XL, `cjpegli` and the
-`ssimulacra2` score), libavif 1.4.2, libwebp 1.6.0 and pngquant 2.17.0. Each
-download is checked against a pinned SHA-256, and only the programs that are
-used are kept, with their licence files. They are not stored in this repository;
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists them. `oxipng` is optional
-and is used if it is on `PATH`.
+processes: the official Windows releases of libjxl (JPEG XL, `cjpegli` and the
+`ssimulacra2` score), libavif, libwebp and pngquant. Each download is checked
+against a pinned SHA-256, and only the programs that are used are kept, with
+their licence files. They are not stored in this repository;
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists them and their versions.
+`oxipng` is optional and is used if it is on `PATH`.
 
 Without the tools the program still runs: only the PNG and JPEG encoders are
 built in, the formats whose tools are missing are skipped, and the report lists
 what is missing. See [External tools](docs/usage.md#external-tools).
 
-## Using it
+## Quick start
+
+```powershell
+target\release\smart-compress.exe samples\photos\picsum-433-3200x2400.jpg
+```
+
+The text report it prints includes these lines (the rest is left out here):
+
+```text
+Original: 633331 bytes, 3200x2400, Photo, decoded Rgb8, source Rgb8
+Winner: Avif q67/e6 -> 455682 bytes
+Output: samples\photos\optimized\picsum-433-3200x2400.avif
+Failures: 0
+Summary: 1 improved, 0 kept as they were, 0 skipped, 0 failed
+```
+
+The 633,331-byte JPEG became a 455,682-byte AVIF, 28% smaller, in an `optimized`
+folder next to the original. It scores 80.8 against a floor of 80 and took 17
+seconds on six cores.
+
+## Usage
 
 ```powershell
 # One image
-smart-compress photo.jpg
+target\release\smart-compress.exe photo.jpg
 
 # A folder, with a chosen output folder and a JSON report
-smart-compress .\photos --recursive --out-dir out --report json --report-out report.json
+target\release\smart-compress.exe .\photos --recursive --out-dir out --report json --report-out report.json
 
 # See what would be processed, without encoding anything
-smart-compress photo.jpg --dry-run
+target\release\smart-compress.exe photo.jpg --dry-run
 ```
-
-(`smart-compress` here stands for `target\release\smart-compress.exe`.)
 
 Two options do most of the work:
 
@@ -113,22 +108,17 @@ Two options do most of the work:
 | `smallest` | The above and JPEG XL | Purely on size |
 | `max-compat` | JPEG, PNG | Smallest |
 
-Things worth knowing:
-
-- **Nothing smaller passed.** The image is reported as `kept`, nothing is
-  written, and that is not an error. The exit status is 1 only when an image
-  failed.
-- **Second runs.** Images whose output already exists are skipped unless you
-  pass `--overwrite`.
-- **Reports** come as text, JSON or Markdown and list every candidate with its
-  size, score, timing and the reason it was rejected or skipped.
+When nothing smaller passes the check, the image is reported as `kept` and
+nothing is written. That is not an error: the exit status is 1 only when an
+image failed. A second run skips images whose output already exists unless you
+pass `--overwrite`. Reports come as text, JSON or Markdown and list every
+candidate with its size, score, timing and the reason it was rejected or
+skipped.
 
 <details>
-<summary>The candidate table of the run at the top of this page</summary>
+<summary>The candidate table of the quick-start run</summary>
 
-`samples/photos/picsum-433-3200x2400.jpg`, default settings, `--workers 6`,
-17 seconds. The 633,331-byte JPEG became a 455,682-byte AVIF (28% smaller) that
-scores 80.8 against a floor of 80.
+`samples/photos/picsum-433-3200x2400.jpg`, default settings, `--workers 6`.
 
 | Codec | Settings | Size (bytes) | SSIMULACRA2 | Status |
 |---|---|---:|---:|---|
@@ -172,51 +162,50 @@ equivalent command.
 The window is a page compiled into the executable and served on `127.0.0.1`
 only, behind a per-session token, shown by Microsoft Edge in app mode (a browser
 tab is the fallback). `smart-compress-app.exe` must stay next to
-`smart-compress.exe`. `smart-compress --gui` opens the same page in your default
-browser instead.
+`smart-compress.exe`. `smart-compress.exe --gui` opens the same page in your
+default browser instead.
 
 ## How it decides
 
-1. **Read.** It checks the content against the extension, applies the EXIF
-   orientation to the pixels, and labels the image (photo, screenshot,
+1. It reads the image: it checks the content against the extension, applies the
+   EXIF orientation to the pixels, and labels the image (photo, screenshot,
    transparent asset, simple graphic) for the report.
-2. **Encode.** Candidates are made from the decoded original pixels, never from
-   another lossy candidate. The quality where each codec crosses the floor is
-   found by bracketing and interpolation, and candidates that cannot win are
-   skipped.
-3. **Score.** Every candidate is decoded and scored against the original with
+2. It encodes candidates from the decoded original pixels, never from another
+   lossy candidate. The quality where each codec crosses the floor is found by
+   bracketing and interpolation, and candidates that cannot win are skipped.
+3. It decodes every candidate and scores it against the original with
    SSIMULACRA2. Transparent images must also pass alpha checks.
-4. **Keep.** The smallest candidate that is smaller than the original and at or
-   above the floor is written atomically.
+4. It keeps the smallest candidate that is smaller than the original and at or
+   above the floor, and writes it atomically.
 
 Memory, threads, temporary disk and time are budgeted: `--workers` is a real cap
 on threads, and work waits instead of exceeding the memory plan.
 
-Two experimental options make it faster and are off by default: `--search
-predicted` starts each format near its expected quality (a 12 MP photo in 20 to
-29 seconds instead of 28 to 38; it helps at the balanced preset only), and `--metric
+Two experimental options make it faster and are off by default. `--search
+predicted` starts each format near its expected quality: a 12 MP photo takes 20
+to 29 seconds instead of 28 to 38, at the balanced preset only. `--metric
 ssimulacra2-inprocess` scores inside the program without the external tool.
 Their measurements and limits are in
 [docs/benchmarking.md](docs/benchmarking.md#experimental-modes-predicted-search-and-in-process-scoring).
 
 ## Known limits
 
-- **Not fast.** With a seven-core cap a single photo takes about 12 s at 3.8 MP,
-  32 s at 12 MP and 42 s at 16.7 MP.
-- **Windows first.** Process-tree termination, the Ctrl+C handler,
+- It is not fast. With a seven-core cap a single photo takes about 12 s at
+  3.8 MP, 32 s at 12 MP and 42 s at 16.7 MP.
+- Only Windows is supported. Process-tree termination, the Ctrl+C handler,
   physical-memory detection, the app window and the file dialogs are
   Windows-only, and nothing else has been tested. See
   [Platform notes](docs/usage.md#platform-notes).
-- **No colour conversion.** An output carries the source's colour profile
-  unchanged. A source whose colour cannot be carried (a non-sRGB PNG without a
-  profile, a CMYK JPEG with its own profile) is refused with the reason in the
-  report. No HDR.
-- **No animation, no resizing.** GIF, animated WebP, APNG and animated AVIF are
-  rejected, as are SVG, BMP, TIFF and JPEG XL inputs. Dimensions never change.
-- **No hardware encoders.**
-- **The scoring has limits.** Images above 16 MP are scored on a mosaic of
-  full-resolution samples, so a small busy region between samples can be missed.
-  Without the `ssimulacra2` tool a built-in PSNR-derived score decides, which is
+- It converts no colours. An output carries the source's colour profile
+  unchanged, and a source whose colour cannot be carried (a non-sRGB PNG without
+  a profile, a CMYK JPEG with its own profile) is refused with the reason in the
+  report. HDR is not handled.
+- Animation is rejected (GIF, animated WebP, APNG, animated AVIF), as are SVG,
+  BMP, TIFF and JPEG XL inputs. Dimensions never change.
+- Hardware encoders are not used.
+- Images above 16 MP are scored on a mosaic of full-resolution samples, so a
+  small busy region between samples can be missed.
+- Without the `ssimulacra2` tool a built-in PSNR-derived score decides, which is
   not perceptual.
 
 ## Documentation
@@ -229,13 +218,11 @@ Their measurements and limits are in
   [docs/release.md](docs/release.md): CI, machine-dependent tests, packaging.
 - [ROADMAP.md](ROADMAP.md): open work and what was decided against.
 
-## Status
+## Contributing
 
-Version 0.1.0, before a first release. It is maintained by one person and tested
-on Windows 11 only; flags, defaults and the report layout can still change
-(reports carry a schema version, currently 6). Bug reports and measured
-improvements are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). To report a
-vulnerability, see [SECURITY.md](SECURITY.md).
+Bug reports and measured improvements are welcome.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the build steps and the checks CI runs.
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Licence
 

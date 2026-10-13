@@ -38,7 +38,9 @@ https://github.com/kornelski/pngquant/tree/2.17.0
 ## Rust crates
 
 The program is built from Rust crates that are listed with their exact versions
-in `Cargo.lock`. Each carries its own licence.
+in `Cargo.lock`. Each carries its own licence; most are MIT or Apache-2.0.
+`fast-ssim2`, which computes the in-process SSIMULACRA2 score, is BSD-2-Clause,
+so a redistributed binary must carry its copyright notice.
 
 ## Sample photographs
 

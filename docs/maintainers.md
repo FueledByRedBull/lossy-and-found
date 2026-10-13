@@ -3,8 +3,7 @@
 ## What is authoritative
 
 The repository is the source of truth. The checked-in CI workflow and
-`Cargo.lock` are the reproducibility boundary. `target/`, candidate caches
-(`.smart-compress-cache/`), output folders and the downloaded programs under
+`Cargo.lock` are the reproducibility boundary. `target/`, output folders and the downloaded programs under
 `tools/` are generated and are not tracked. Personal photographs are never
 committed; `samples/photos/` holds stock photos with their sources (see
 `samples/photos/SOURCES.md`).

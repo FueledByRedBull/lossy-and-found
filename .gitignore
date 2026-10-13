@@ -1,9 +1,6 @@
 # Build output
 /target/
 
-# Candidate cache (the default cache lives outside the repository)
-.smart-compress-cache/
-
 # Third-party programs: tools/fetch-tools.ps1 installs them into tools/, so
 # everything there is ignored (including a tools/downloads/ folder of old
 # archives) except the scripts and the process-tree measuring tool.
