@@ -41,6 +41,7 @@ mod process;
 mod score;
 mod search;
 mod source;
+mod stages;
 #[cfg(test)]
 mod tests;
 

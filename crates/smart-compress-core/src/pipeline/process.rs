@@ -1,7 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -11,28 +10,28 @@ use std::{
 
 use anyhow::Result;
 use smart_compress_codecs::{
-    Codec, EncoderSettings, WaitEnded, cancellation_requested, normalized_png,
+    Codec, EncoderSettings, MetadataPayload, Permit, WaitEnded, cancellation_requested,
+    normalized_png,
 };
 
 use super::{
-    CandidateEvaluationRequest, Optimizer, QualityRefinementRequest, SCORING_VERSION, StagedPlan,
-    evaluate::record_candidate,
+    Optimizer, SCORING_VERSION,
     guards::{ActiveCandidate, FileProgressGuard, TempUsageGuard, directory_bytes},
     inputs::input_identity,
     output::metadata_payload,
-    plan::{is_lossless_probe, lossless_gate, lossless_gate_applies, stage_plan},
+    plan::lossless_gate_applies,
     quality_floor,
     score::write_metric_png,
-    search::{attempts, coarse_followup, held_back_to_run},
     source::external_tools_accept_input,
+    stages::SearchContext,
     wait_stop_reason, work,
 };
 use crate::{
-    candidate::{CandidateReport, CandidateStatus},
+    candidate::CandidateStatus,
     config::MetadataPolicy,
-    decision::{AcceptedCandidate, DecisionPolicy},
+    decision::DecisionPolicy,
     gpu::{GpuStatus, GpuWorkEstimate},
-    image_probe::{apply_orientation, icc_profile_mismatch, probe_image},
+    image_probe::{DecodedSource, apply_orientation, icc_profile_mismatch, probe_image},
     memory,
     report::{ImageOutcome, ImageReport, ImageStageTimings},
     scoring::{ComputeBackend, FULL_SIZE_METRIC_PIXELS, GpuPreparedOriginal, OriginalImage},
@@ -44,6 +43,45 @@ fn panic_message(panic: &(dyn std::any::Any + Send)) -> &str {
         .copied()
         .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("unknown panic")
+}
+
+/// What the GPU prepared of the original, and the fallback when it could not.
+#[derive(Default)]
+struct GpuPreprocess {
+    prepared_original: Option<GpuPreparedOriginal>,
+    preprocess_ms: Option<u64>,
+    fallback_reason: Option<String>,
+}
+
+/// The oriented source pixels, the metadata to write with them, and what the
+/// probe found out about how to score them.
+struct SourceImage {
+    original: OriginalImage,
+    metadata_payload: MetadataPayload,
+    min_quality: f32,
+    has_alpha: bool,
+}
+
+/// What the candidates of one image read and write. The field order is the
+/// drop order and matters: the usage count goes first, then the candidate
+/// folder, then the normalized copy.
+struct Workspace {
+    temp_usage: TempUsageGuard,
+    candidate_dir: tempfile::TempDir,
+    normalized: Option<(tempfile::TempDir, PathBuf)>,
+    absolute_input: PathBuf,
+    cache_source_hash: Option<String>,
+    external_metric_original: Option<PathBuf>,
+}
+
+/// The file the encoders read: the normalized copy when there is one.
+fn encoder_source<'a>(
+    normalized: &'a Option<(tempfile::TempDir, PathBuf)>,
+    absolute_input: &'a Path,
+) -> &'a Path {
+    normalized
+        .as_ref()
+        .map_or(absolute_input, |(_, path)| path.as_path())
 }
 
 impl Optimizer {
@@ -154,8 +192,106 @@ impl Optimizer {
             return report;
         }
 
-        let workers = self.config.workers.max(1);
         let image_deadline = self.config.max_image_time.map(|limit| image_start + limit);
+        let (source_pixels, parallelism, concurrency) =
+            self.size_image(input, original_size, &mut report);
+        let Some(_reserved) = self.admit_image(source_pixels, image_deadline, waited, &mut report)
+        else {
+            return report;
+        };
+
+        self.active_files.fetch_add(1, Ordering::Relaxed);
+        let _active_file = ActiveCandidate(&self.active_files, &self.temp_gate);
+        #[cfg(test)]
+        assert!(
+            input.file_name().is_none_or(|name| name != "panic.png"),
+            "injected panic"
+        );
+
+        let Some((decoded, alpha_changed)) = self.decode_source(input, &mut report) else {
+            return report;
+        };
+        let orientation_applied = decoded.metadata.orientation_applied();
+        let Some(gpu) = self.preprocess_on_gpu(&decoded, &mut report) else {
+            return report;
+        };
+        let source = self.read_source(input, decoded, gpu.prepared_original.as_ref(), &mut report);
+        if self.ends_before_search(&mut report) {
+            return report;
+        }
+
+        let Some((candidate_plan, gated)) = self.plan_search(input, &mut report) else {
+            return report;
+        };
+        let Some(mut workspace) = self.prepare_workspace(
+            input,
+            (orientation_applied, alpha_changed),
+            &source,
+            &mut report,
+        ) else {
+            return report;
+        };
+
+        let policy = DecisionPolicy {
+            min_quality: source.min_quality,
+            quality_slack: self.config.quality_slack,
+            allow_larger: self.config.allow_larger,
+            original_size,
+            prefer_compatibility_delta: self.config.preset.compat_delta(),
+            target: self.config.target,
+        };
+
+        let search_start = Instant::now();
+        let candidate_total = candidate_plan.len();
+        self.progress.candidates_planned(input, candidate_total);
+        let ctx = SearchContext {
+            input,
+            image_start,
+            image_deadline,
+            waited,
+            parallelism,
+            concurrency,
+            gated,
+            candidate_total,
+            pool: self.pool().expect("run builds the worker pool"),
+            encoder_source: encoder_source(&workspace.normalized, &workspace.absolute_input),
+            original: &source.original,
+            metadata: &source.metadata_payload,
+            prepared_original: gpu.prepared_original.as_ref(),
+            preprocess_ms: gpu.preprocess_ms,
+            gpu_preprocess_fallback_reason: gpu.fallback_reason.as_deref(),
+            has_alpha: source.has_alpha,
+            candidate_dir: workspace.candidate_dir.path(),
+            policy: &policy,
+            cache_source_hash: workspace.cache_source_hash.as_deref(),
+            external_metric_original: workspace.external_metric_original.as_deref(),
+        };
+        let search_stop_reason =
+            self.search_candidates(&ctx, candidate_plan, &mut workspace.temp_usage, &mut report);
+        if !self.settle_search(input, search_start, search_stop_reason, &mut report) {
+            return report;
+        }
+        self.write_outcome(
+            input,
+            original_size,
+            &policy,
+            workspace.candidate_dir.path(),
+            &mut report,
+        );
+
+        report
+    }
+
+    /// Counts the candidates the image may run at once, and warns when it alone
+    /// is more than the memory limit. Returns the source pixels, the candidate
+    /// slots and the concurrency.
+    fn size_image(
+        &self,
+        input: &Path,
+        original_size: u64,
+        report: &mut ImageReport,
+    ) -> (u64, usize, usize) {
+        let workers = self.config.workers.max(1);
         let temp_budgeted =
             self.config.max_temp_bytes.is_some() || self.config.max_run_temp_bytes.is_some();
         let source_pixels = self.source_pixels(input, original_size);
@@ -184,6 +320,17 @@ impl Optimizer {
             .parallelism
             .candidates
             .map_or(parallelism, |candidates| candidates.max(1));
+        (source_pixels, parallelism, concurrency)
+    }
+
+    /// Reserves the image's memory; None when the wait for it ended.
+    fn admit_image(
+        &self,
+        source_pixels: u64,
+        image_deadline: Option<Instant>,
+        waited: &AtomicU64,
+        report: &mut ImageReport,
+    ) -> Option<Permit<'_>> {
         // The image reserves its memory before it is decoded. One larger than
         // the limit is granted the whole of it, and so runs alone.
         let admission_start = Instant::now();
@@ -194,25 +341,26 @@ impl Optimizer {
             admission_start.elapsed().as_millis() as u64,
             Ordering::Relaxed,
         );
-        let _reserved = match reserved {
-            Ok(permit) => permit,
+        match reserved {
+            Ok(permit) => Some(permit),
             Err(ended) => {
                 report.errors.push(format!(
                     "{} while waiting for memory",
                     wait_stop_reason(ended, self.config.max_image_time)
                 ));
-                return report;
+                None
             }
-        };
+        }
+    }
 
-        self.active_files.fetch_add(1, Ordering::Relaxed);
-        let _active_file = ActiveCandidate(&self.active_files, &self.temp_gate);
-        #[cfg(test)]
-        assert!(
-            input.file_name().is_none_or(|name| name != "panic.png"),
-            "injected panic"
-        );
-
+    /// Decodes the source and applies the alpha policy and the colour profile
+    /// checks. Returns the decoded source and whether the alpha policy changed
+    /// the image; None when the image cannot go on.
+    fn decode_source(
+        &self,
+        input: &Path,
+        report: &mut ImageReport,
+    ) -> Option<(DecodedSource, bool)> {
         let source_decode_start = Instant::now();
         let decoded = self.decode_input(input);
         report.timings.source_decode_ms = Some(source_decode_start.elapsed().as_millis() as u64);
@@ -220,7 +368,7 @@ impl Optimizer {
             Ok(value) => value,
             Err(error) => {
                 report.errors.push(format!("{error:#}"));
-                return report;
+                return None;
             }
         };
         // The profile is judged against the pixels that will be written, so
@@ -233,7 +381,7 @@ impl Optimizer {
             Ok(None) => false,
             Err(error) => {
                 report.errors.push(format!("{error:#}"));
-                return report;
+                return None;
             }
         };
         if let Some(reason) = decoded
@@ -254,10 +402,17 @@ impl Optimizer {
             );
         }
         report.warnings.append(&mut decoded.metadata.warnings);
-        let orientation_applied = decoded.metadata.orientation_applied();
-        let mut prepared_original = None;
-        let mut preprocess_ms = None;
-        let mut gpu_preprocess_fallback_reason = None;
+        Some((decoded, alpha_changed))
+    }
+
+    /// Prepares the original on the GPU when the image is scored there; None
+    /// when the image cannot go on.
+    fn preprocess_on_gpu(
+        &self,
+        decoded: &DecodedSource,
+        report: &mut ImageReport,
+    ) -> Option<GpuPreprocess> {
+        let mut preprocess = GpuPreprocess::default();
         if self.should_use_gpu_preprocess(&decoded.image)
             && let Some(gpu) = self.compute.as_ref().as_gpu()
         {
@@ -266,7 +421,7 @@ impl Optimizer {
                 Ok(unit) => unit,
                 Err(error) => {
                     report.errors.push(format!("{error:#}"));
-                    return report;
+                    return None;
                 }
             };
             let prepared = gpu.prepare_original(&decoded.image, decoded.metadata.orientation);
@@ -280,24 +435,35 @@ impl Optimizer {
                             prepared.preprocess_mode()
                         ));
                     }
-                    prepared_original = Some(prepared);
+                    preprocess.prepared_original = Some(prepared);
                 }
                 Err(error) => {
                     let reason = format!("GPU preprocess failed: {error:#}");
                     if self.config.gpu.required {
                         report.errors.push(reason);
-                        return report;
+                        return None;
                     }
                     report
                         .warnings
                         .push(format!("CPU scoring fallback: {reason}"));
-                    gpu_preprocess_fallback_reason = Some(reason);
+                    preprocess.fallback_reason = Some(reason);
                 }
             }
-            preprocess_ms = Some(preprocess_start.elapsed().as_millis() as u64);
-            report.timings.gpu_preprocess_ms = preprocess_ms;
+            preprocess.preprocess_ms = Some(preprocess_start.elapsed().as_millis() as u64);
+            report.timings.gpu_preprocess_ms = preprocess.preprocess_ms;
         }
+        Some(preprocess)
+    }
 
+    /// Orients the image, picks the metric it is scored with, probes it and
+    /// records the probe in the report.
+    fn read_source(
+        &self,
+        input: &Path,
+        mut decoded: DecodedSource,
+        prepared_original: Option<&GpuPreparedOriginal>,
+        report: &mut ImageReport,
+    ) -> SourceImage {
         let orientation_start = Instant::now();
         apply_orientation(&mut decoded.image, decoded.metadata.orientation);
         report.timings.orientation_ms = Some(orientation_start.elapsed().as_millis() as u64);
@@ -318,9 +484,7 @@ impl Optimizer {
             input,
             &original,
             &decoded.metadata,
-            prepared_original
-                .as_ref()
-                .map(GpuPreparedOriginal::overview),
+            prepared_original.map(GpuPreparedOriginal::overview),
         );
         report.timings.probe_ms = Some(probe_start.elapsed().as_millis() as u64);
         let has_alpha = probe.has_alpha;
@@ -342,45 +506,63 @@ impl Optimizer {
         // Report the bands that were actually uploaded, not the estimate.
         if let (Some(work), Some(band_pixels)) = (
             report.gpu_work.as_mut(),
-            prepared_original
-                .as_ref()
-                .and_then(GpuPreparedOriginal::band_pixels),
+            prepared_original.and_then(GpuPreparedOriginal::band_pixels),
         ) {
             work.tiling_required_for_full_source_preprocess = true;
             work.selected_tile_pixels = Some(band_pixels);
         }
         report.probe = Some(probe);
+        SourceImage {
+            original,
+            metadata_payload,
+            min_quality,
+            has_alpha,
+        }
+    }
 
+    /// Ends the image before any search for a dry run, or when a metric tool
+    /// it needs is missing. Returns whether the image ends here.
+    fn ends_before_search(&self, report: &mut ImageReport) -> bool {
         if self.config.dry_run {
             report.outcome = ImageOutcome::DryRun;
-            return report;
+            return true;
         }
         if self.use_ssimulacra2 && !self.backend.tools().ssimulacra2.enabled {
             report.errors.push(
                 "SSIMULACRA2 metric requested, but ssimulacra2 tool is not available".to_string(),
             );
-            return report;
+            return true;
         }
         if self.config.metrics.butteraugli && !self.backend.tools().butteraugli.enabled {
             report.errors.push(
                 "Butteraugli metric requested, but butteraugli_main tool is not available"
                     .to_string(),
             );
-            return report;
+            return true;
         }
+        false
+    }
 
+    /// Plans the candidates, and whether the lossless probe gates the other
+    /// lossless encoders. None when the image ends here: nothing could be
+    /// planned, or its output is already there.
+    fn plan_search(
+        &self,
+        input: &Path,
+        report: &mut ImageReport,
+    ) -> Option<(Vec<(Codec, EncoderSettings)>, bool)> {
         let probe = report
             .probe
             .as_ref()
             .expect("probe set after successful decode");
-        let mut candidate_plan = self.plan_candidates(probe);
+        let candidate_plan = self.plan_candidates(probe);
         let gated = !self.config.verbose && lossless_gate_applies(probe, &candidate_plan);
         if candidate_plan.is_empty() {
             report.errors.push(format!(
                 "no candidate could be planned for this image: {}",
                 self.unplanned_reasons(probe)
             ));
-            return report;
+            return None;
         }
         // The destination is known before the search, so an image whose output
         // is already there is not searched at all.
@@ -395,7 +577,7 @@ impl Optimizer {
                     Ok(_) => {}
                     Err(error) => {
                         report.errors.push(format!("{error:#}"));
-                        return report;
+                        return None;
                     }
                 }
             }
@@ -405,10 +587,27 @@ impl Optimizer {
                     path.display()
                 ));
                 report.outcome = ImageOutcome::Skipped;
-                return report;
+                return None;
             }
         }
+        Some((candidate_plan, gated))
+    }
 
+    /// Writes the normalized copy of the source when the encoders cannot read
+    /// the input itself, opens the folder the candidates are written in and
+    /// accounts for its temporary space. None when the image cannot go on.
+    fn prepare_workspace(
+        &self,
+        input: &Path,
+        (orientation_applied, alpha_changed): (bool, bool),
+        source: &SourceImage,
+        report: &mut ImageReport,
+    ) -> Option<Workspace> {
+        let SourceImage {
+            original,
+            metadata_payload,
+            ..
+        } = source;
         // External encoders copy EXIF/XMP from a source file they read
         // directly, so only `keep` may hand them the untouched input.
         let needs_normalized_source = orientation_applied
@@ -418,11 +617,11 @@ impl Optimizer {
             || !matches!(self.config.metadata, MetadataPolicy::Keep);
         let normalize_start = Instant::now();
         let normalized = if needs_normalized_source {
-            match work(1).and_then(|_unit| normalized_png(&original, &metadata_payload)) {
+            match work(1).and_then(|_unit| normalized_png(original, metadata_payload)) {
                 Ok(value) => Some(value),
                 Err(error) => {
                     report.errors.push(format!("{error:#}"));
-                    return report;
+                    return None;
                 }
             }
         } else {
@@ -432,20 +631,18 @@ impl Optimizer {
         // Tools run in their own folder and read a leading `-` as an option,
         // so the input they are given is absolute.
         let absolute_input = std::path::absolute(input).unwrap_or_else(|_| input.to_path_buf());
-        let encoder_source = normalized
-            .as_ref()
-            .map_or(absolute_input.as_path(), |(_, path)| path.as_path());
         let cache_lookup_start = Instant::now();
-        let cache_source_hash = self
-            .cache
-            .as_ref()
-            .and_then(|cache| cache.source_hash(encoder_source).ok());
+        let cache_source_hash = self.cache.as_ref().and_then(|cache| {
+            cache
+                .source_hash(encoder_source(&normalized, &absolute_input))
+                .ok()
+        });
         report.timings.cache_lookup_ms = Some(cache_lookup_start.elapsed().as_millis() as u64);
         let candidate_dir = match tempfile::tempdir() {
             Ok(dir) => dir,
             Err(error) => {
                 report.errors.push(format!("{error:#}"));
-                return report;
+                return None;
             }
         };
         let mut temp_usage = TempUsageGuard::new(
@@ -466,13 +663,13 @@ impl Optimizer {
                 }
                 _ => {
                     let path = candidate_dir.path().join("external-metric-original.png");
-                    match write_metric_png(&original, &path) {
+                    match write_metric_png(original, &path) {
                         Ok(()) => Some(path),
                         Err(error) => {
                             report.errors.push(format!(
                                 "preparing external metric original failed: {error:#}"
                             ));
-                            return report;
+                            return None;
                         }
                     }
                 }
@@ -487,7 +684,7 @@ impl Optimizer {
         report.temporary_bytes_peak = initial_temp_bytes;
         if let Err(error) = temp_usage.set(initial_temp_bytes, self.config.max_run_temp_bytes) {
             report.errors.push(format!("{error:#}"));
-            return report;
+            return None;
         }
         if let Some(limit) = self.config.max_temp_bytes
             && initial_temp_bytes > limit
@@ -495,314 +692,27 @@ impl Optimizer {
             report.errors.push(format!(
                 "temporary storage budget of {limit} bytes exceeded ({initial_temp_bytes} bytes)"
             ));
-            return report;
+            return None;
         }
+        Some(Workspace {
+            temp_usage,
+            candidate_dir,
+            normalized,
+            absolute_input,
+            cache_source_hash,
+            external_metric_original,
+        })
+    }
 
-        let policy = DecisionPolicy {
-            min_quality,
-            quality_slack: self.config.quality_slack,
-            allow_larger: self.config.allow_larger,
-            original_size,
-            prefer_compatibility_delta: self.config.preset.compat_delta(),
-            target: self.config.target,
-        };
-
-        let search_start = Instant::now();
-        let mut best: Option<AcceptedCandidate> = None;
-        let candidate_total = candidate_plan.len();
-        self.progress.candidates_planned(input, candidate_total);
-        // Encoding, decoding and scoring a candidate depend only on the source,
-        // so the planned grid is evaluated concurrently and the decisions below
-        // still run in plan order. Temporary-disk budgets need the one-at-a-time
-        // path to stop before the next file is written.
-        let pool = self.pool().expect("run builds the worker pool");
-        let make_request =
-            |candidate_index: usize, codec: Codec, settings: EncoderSettings, peers: usize| {
-                CandidateEvaluationRequest {
-                    input,
-                    codec,
-                    settings,
-                    encoder_source,
-                    original: &original,
-                    metadata: &metadata_payload,
-                    prepared_original: prepared_original.as_ref(),
-                    preprocess_ms,
-                    gpu_preprocess_fallback_reason: gpu_preprocess_fallback_reason.as_deref(),
-                    has_alpha,
-                    candidate_dir: candidate_dir.path(),
-                    policy: &policy,
-                    cache_source_hash: cache_source_hash.as_deref(),
-                    external_metric_original: external_metric_original.as_deref(),
-                    candidate_index,
-                    progress_index: candidate_index + 1,
-                    progress_total: candidate_total,
-                    peers,
-                    deadline: image_deadline,
-                    waited,
-                }
-            };
-        if parallelism == 1 {
-            // One at a time, walk each format from its lowest quality up so
-            // the loop below can stop a format as soon as more quality can
-            // only mean a larger file. The lossless probe goes first, so the
-            // other lossless encoders can be gated on it.
-            candidate_plan.sort_by_key(|(codec, settings)| {
-                let quality = match settings {
-                    EncoderSettings::Quality { quality, .. } => 1 + u16::from(*quality),
-                    _ => 0,
-                };
-                // Cheapest encoders first, so slow ones meet a best to be measured against.
-                let order = [
-                    Codec::Jpeg,
-                    Codec::Avif,
-                    Codec::Jxl,
-                    Codec::Webp,
-                    Codec::Png,
-                ];
-                (
-                    !(gated && is_lossless_probe(*codec, settings)),
-                    order.iter().position(|other| other == codec),
-                    quality,
-                )
-            });
-        }
-        // Evaluates one stage of the plan and records it in plan order, whichever
-        // candidate finishes first. Returns why the search had to stop, if it did.
-        let mut run_stage = |stage: Vec<(Codec, EncoderSettings)>,
-                             report: &mut ImageReport,
-                             best: &mut Option<AcceptedCandidate>|
-         -> Option<String> {
-            let first_index = report.candidates.len();
-            let stage_best = best.clone();
-            let mut evaluated: Vec<Option<CandidateReport>> = Vec::new();
-            if parallelism > 1 {
-                use rayon::prelude::*;
-                let budget = self
-                    .config
-                    .max_candidate_attempts
-                    .map_or(usize::MAX, |limit| limit.saturating_sub(attempts(report)));
-                let planned = stage.iter().take(budget).enumerate().collect::<Vec<_>>();
-                for chunk in planned.chunks(concurrency) {
-                    if self.wait_for_temp_room(image_deadline, waited).is_err() {
-                        break;
-                    }
-                    pool.install(|| {
-                        evaluated.par_extend(chunk.par_iter().map(|(index, (codec, settings))| {
-                            if cancellation_requested()
-                                || self
-                                    .config
-                                    .max_image_time
-                                    .is_some_and(|limit| image_start.elapsed() >= limit)
-                            {
-                                return None;
-                            }
-                            // The pass or fail of a quality places the bracket of its
-                            // format, so only candidates outside any bracket may be
-                            // skipped as dominated.
-                            let best = match settings {
-                                EncoderSettings::Quality { .. } => None,
-                                _ => stage_best.as_ref(),
-                            };
-                            self.score_candidate_report(
-                                make_request(
-                                    first_index + index,
-                                    *codec,
-                                    settings.clone(),
-                                    chunk.len(),
-                                ),
-                                best,
-                            )
-                        }));
-                    });
-                }
-            }
-            let mut search_stop_reason = None;
-            // Formats whose remaining, higher qualities cannot win (one-at-a-time path only).
-            let mut settled: HashSet<Codec> = HashSet::new();
-            for (offset, (codec, settings)) in stage.into_iter().enumerate() {
-                if cancellation_requested() {
-                    search_stop_reason = Some("cancelled".to_string());
-                    break;
-                }
-                if let Some(limit) = self.config.max_candidate_attempts
-                    && attempts(report) >= limit
-                {
-                    search_stop_reason =
-                        Some(format!("candidate attempt budget of {limit} reached"));
-                    break;
-                }
-                if let Some(limit) = self.config.max_image_time
-                    && image_start.elapsed() >= limit
-                {
-                    search_stop_reason =
-                        Some(format!("image wall-time budget of {:?} reached", limit));
-                    break;
-                }
-                let lossy = matches!(settings, EncoderSettings::Quality { .. });
-                let candidate = match evaluated.get_mut(offset).and_then(Option::take) {
-                    Some(candidate) => candidate,
-                    None if parallelism == 1 && lossy && settled.contains(&codec) => {
-                        CandidateReport::unevaluated(
-                            codec,
-                            settings,
-                            "a lower quality of this format already settled it".to_string(),
-                        )
-                    }
-                    None => match (parallelism == 1 && gated)
-                        .then(|| {
-                            lossless_gate(
-                                &report.candidates,
-                                codec,
-                                &settings,
-                                &policy,
-                                best.as_ref(),
-                            )
-                        })
-                        .flatten()
-                    {
-                        Some(reason) => CandidateReport::unevaluated(codec, settings, reason),
-                        None => {
-                            if let Err(ended) = self.wait_for_temp_room(image_deadline, waited) {
-                                search_stop_reason =
-                                    Some(wait_stop_reason(ended, self.config.max_image_time));
-                                break;
-                            }
-                            pool.install(|| {
-                                self.score_candidate_report(
-                                    make_request(first_index + offset, codec, settings.clone(), 1),
-                                    best.as_ref(),
-                                )
-                            })
-                            .unwrap_or_else(|| {
-                                CandidateReport::unevaluated(
-                                    codec,
-                                    settings,
-                                    "stopped while waiting for memory".to_string(),
-                                )
-                            })
-                        }
-                    },
-                };
-                // File size grows with quality, so once a quality passes, is
-                // dominated, or is already too large, higher ones cannot win.
-                let settles = lossy
-                    && match &candidate.status {
-                        CandidateStatus::Accepted => true,
-                        CandidateStatus::Skipped(reason) => reason.starts_with("dominated"),
-                        // Too large to be worth scoring; a scored one is a quality verdict.
-                        CandidateStatus::Rejected(_) => candidate.quality.is_none(),
-                        CandidateStatus::Failed(_) => false,
-                    };
-                if settles {
-                    settled.insert(codec);
-                }
-                record_candidate(&policy, candidate, report, best);
-                let temporary_bytes = directory_bytes(candidate_dir.path());
-                report.temporary_bytes_current = temporary_bytes;
-                report.temporary_bytes_peak = report.temporary_bytes_peak.max(temporary_bytes);
-                if let Err(error) = temp_usage.set(temporary_bytes, self.config.max_run_temp_bytes)
-                {
-                    search_stop_reason = Some(format!("{error:#}"));
-                    break;
-                }
-                if let Some(limit) = self.config.max_temp_bytes
-                    && temporary_bytes > limit
-                {
-                    search_stop_reason = Some(format!(
-                        "temporary storage budget of {limit} bytes exceeded ({temporary_bytes} bytes)"
-                    ));
-                    break;
-                }
-            }
-            search_stop_reason
-        };
-        // With candidates running in parallel the coarse grid is staged: the middle
-        // quality of every lossy format first, then only the side of it the quality
-        // floor must lie on. Verbose mode keeps the whole grid in one stage.
-        let StagedPlan { first, held, mids } = if parallelism > 1 && !self.config.verbose {
-            stage_plan(candidate_plan, gated)
-        } else {
-            StagedPlan {
-                first: candidate_plan,
-                held: Vec::new(),
-                mids: HashMap::new(),
-            }
-        };
-        let mut search_stop_reason = run_stage(first, &mut report, &mut best);
-        if search_stop_reason.is_none() && !held.is_empty() {
-            let mut run = Vec::new();
-            let mut skipped = Vec::new();
-            for (codec, settings) in held {
-                let reason = match (&settings, mids.get(&codec)) {
-                    (EncoderSettings::Quality { quality, .. }, Some(mid)) => coarse_followup(
-                        &report.candidates,
-                        &policy,
-                        best.as_ref(),
-                        codec,
-                        *mid,
-                        *quality,
-                    ),
-                    _ if gated => {
-                        lossless_gate(&report.candidates, codec, &settings, &policy, best.as_ref())
-                    }
-                    _ => None,
-                };
-                match reason {
-                    Some(reason) => {
-                        skipped.push(CandidateReport::unevaluated(codec, settings, reason));
-                    }
-                    None => run.push((codec, settings)),
-                }
-            }
-            search_stop_reason = run_stage(run, &mut report, &mut best);
-            // A format that broke the monotonic assumption gets the qualities that
-            // were assumed; so does one whose bracket needs a second failing point.
-            while search_stop_reason.is_none() {
-                let (picked, warnings) = held_back_to_run(
-                    &report.candidates,
-                    &skipped,
-                    self.config.speed.refinement_rounds() > 0,
-                );
-                if picked.is_empty() {
-                    break;
-                }
-                report.warnings.extend(warnings);
-                let run = picked
-                    .iter()
-                    .map(|&index| (skipped[index].codec, skipped[index].settings.clone()))
-                    .collect();
-                for &index in picked.iter().rev() {
-                    skipped.remove(index);
-                }
-                search_stop_reason = run_stage(run, &mut report, &mut best);
-            }
-            for candidate in skipped {
-                record_candidate(&policy, candidate, &mut report, &mut best);
-            }
-        }
-        if search_stop_reason.is_none() {
-            search_stop_reason = self.refine_quality_search(
-                QualityRefinementRequest {
-                    input,
-                    parallelism: concurrency,
-                    image_start,
-                    waited,
-                    encoder_source,
-                    original: &original,
-                    metadata: &metadata_payload,
-                    prepared_original: prepared_original.as_ref(),
-                    preprocess_ms,
-                    gpu_preprocess_fallback_reason: gpu_preprocess_fallback_reason.as_deref(),
-                    has_alpha,
-                    candidate_dir: candidate_dir.path(),
-                    policy: &policy,
-                    cache_source_hash: cache_source_hash.as_deref(),
-                    external_metric_original: external_metric_original.as_deref(),
-                },
-                &mut report,
-                &mut best,
-            );
-        }
+    /// Records why the search ended and what it cost. False when the run was
+    /// cancelled, which ends the image without an output.
+    fn settle_search(
+        &self,
+        input: &Path,
+        search_start: Instant,
+        search_stop_reason: Option<String>,
+        report: &mut ImageReport,
+    ) -> bool {
         report.search_stop_reason = search_stop_reason;
         self.progress.candidates_settled(input);
         report.timings.search_ms = Some(search_start.elapsed().as_millis() as u64);
@@ -811,14 +721,26 @@ impl Optimizer {
             for candidate in &mut report.candidates {
                 candidate.path = None;
             }
-            return report;
+            return false;
         }
         if let Some(reason) = &report.search_stop_reason {
             report.warnings.push(format!(
                 "the search stopped early ({reason}); a smaller passing candidate may have gone untried"
             ));
         }
+        true
+    }
 
+    /// Picks the winner, writes it, and settles the outcome and the temporary
+    /// space in the report.
+    fn write_outcome(
+        &self,
+        input: &Path,
+        original_size: u64,
+        policy: &DecisionPolicy,
+        candidate_dir: &Path,
+        report: &mut ImageReport,
+    ) {
         let winner_index = policy.choose(&report.candidates).and_then(|winner| {
             report
                 .candidates
@@ -870,14 +792,12 @@ impl Optimizer {
             report.outcome = ImageOutcome::Kept;
         }
         report.timings.output_write_ms = Some(output_write_start.elapsed().as_millis() as u64);
-        report.temporary_bytes_current = directory_bytes(candidate_dir.path());
+        report.temporary_bytes_current = directory_bytes(candidate_dir);
         report.temporary_bytes_peak = report
             .temporary_bytes_peak
             .max(report.temporary_bytes_current);
         for candidate in &mut report.candidates {
             candidate.path = None;
         }
-
-        report
     }
 }

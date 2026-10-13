@@ -54,9 +54,6 @@ reason that is measured:
 
 ### Code
 
-- Break up `process_one_inner` in the pipeline. It is about 750 lines and was
-  left whole when the large files were split into modules, because dividing it
-  means changing logic, not moving code.
 - Add a keyed check to the score cache. Cached files are verified by hash, but
   someone who can write to the cache folder and recompute hashes could alter a
   stored score.
