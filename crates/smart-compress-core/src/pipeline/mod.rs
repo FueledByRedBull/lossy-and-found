@@ -38,6 +38,7 @@ mod inprocess;
 mod inputs;
 mod output;
 mod plan;
+mod predict;
 mod process;
 mod score;
 mod search;

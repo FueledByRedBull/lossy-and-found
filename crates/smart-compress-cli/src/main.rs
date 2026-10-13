@@ -11,7 +11,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use smart_compress_codecs::{Codec, EncoderSettings};
 use smart_compress_core::{
     AlphaPolicy, CliConfig, MetadataPolicy, Optimizer, Preset, ProgressObserver, ReportFormat,
-    SpeedPreset, TargetPolicy,
+    SearchMode, SpeedPreset, TargetPolicy,
     atomic_file::atomic_write,
     cache::CandidateCache,
     config::{CacheConfig, FileConfig, PrimaryMetric, parse_codec_list, parse_file_config},
@@ -169,6 +169,14 @@ struct Args {
     /// and takes longer. Default: balanced.
     #[arg(long, value_enum, help_heading = QUALITY)]
     speed: Option<SpeedArg>,
+
+    /// Experimental: how the quality floor is searched. staged tries a coarse
+    /// grid of qualities and refines around the crossing; predicted starts from
+    /// an estimated quality and searches the range its measured error allows,
+    /// for photographs scored with SSIMULACRA2 (other images use staged).
+    /// Default: staged.
+    #[arg(long, value_enum, help_heading = QUALITY)]
+    search: Option<SearchArg>,
 
     /// Accept an output larger than the original. Default: false.
     #[arg(
@@ -481,6 +489,12 @@ enum AlphaArg {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
+enum SearchArg {
+    Staged,
+    Predicted,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
 enum SpeedArg {
     Fast,
     Balanced,
@@ -660,6 +674,9 @@ fn build_config_with_file(args: Args, file_config: Option<FileConfig>) -> Result
     if let Some(speed) = args.speed {
         config.speed = map_speed(speed);
     }
+    if let Some(search) = args.search {
+        config.search = map_search(search);
+    }
     if let Some(workers) = args.workers {
         config.workers = clamp_workers(workers);
     }
@@ -826,6 +843,9 @@ fn apply_file_config(config: &mut CliConfig, file_config: FileConfig) -> Result<
         if let Some(speed) = defaults.speed {
             config.speed = speed;
         }
+        if let Some(search) = defaults.search {
+            config.search = search;
+        }
         if let Some(overwrite) = defaults.overwrite {
             config.overwrite = overwrite;
         }
@@ -974,6 +994,13 @@ fn map_metadata(value: MetadataArg) -> MetadataPolicy {
         MetadataArg::Keep => MetadataPolicy::Keep,
         MetadataArg::Strip => MetadataPolicy::Strip,
         MetadataArg::Safe => MetadataPolicy::Safe,
+    }
+}
+
+fn map_search(value: SearchArg) -> SearchMode {
+    match value {
+        SearchArg::Staged => SearchMode::Staged,
+        SearchArg::Predicted => SearchMode::Predicted,
     }
 }
 
@@ -1468,6 +1495,41 @@ mod tests {
                 case.name
             );
         }
+    }
+
+    #[test]
+    fn the_search_mode_is_staged_unless_the_flag_or_the_file_says_otherwise() {
+        let search = |argv: &[&str], file: Option<&str>| {
+            let args = Args::try_parse_from(
+                std::iter::once("smart-compress")
+                    .chain(["input.png"])
+                    .chain(argv.iter().copied()),
+            )
+            .unwrap();
+            let file = file.map(|text| parse_file_config(text).unwrap());
+            build_config_with_file(args, file).unwrap().search
+        };
+        let predicted = "[defaults]\nsearch = \"predicted\"";
+        let staged = "[defaults]\nsearch = \"staged\"";
+        assert_eq!(search(&[], None), SearchMode::Staged);
+        assert_eq!(
+            search(&["--search", "predicted"], None),
+            SearchMode::Predicted
+        );
+        assert_eq!(search(&[], Some(predicted)), SearchMode::Predicted);
+        // The command line wins over the file.
+        assert_eq!(
+            search(&["--search", "staged"], Some(predicted)),
+            SearchMode::Staged
+        );
+        assert_eq!(
+            search(&["--search", "predicted"], Some(staged)),
+            SearchMode::Predicted
+        );
+        assert!(
+            Args::try_parse_from(["smart-compress", "input.png", "--search", "binary"]).is_err()
+        );
+        assert!(parse_file_config("[defaults]\nsearch = \"binary\"").is_err());
     }
 
     #[test]

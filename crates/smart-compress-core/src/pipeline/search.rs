@@ -12,6 +12,9 @@ use crate::{
     report::ImageReport,
 };
 
+/// The formats whose quality is searched.
+pub(super) const LOSSY: [Codec; 4] = [Codec::Jpeg, Codec::Webp, Codec::Avif, Codec::Jxl];
+
 impl Optimizer {
     /// Probes evenly spaced qualities between each codec's highest rejected
     /// and lowest accepted grid point. The probes are independent, so they run
@@ -21,13 +24,19 @@ impl Optimizer {
         request: QualityRefinementRequest<'_>,
         report: &mut ImageReport,
         best: &mut Option<AcceptedCandidate>,
+        codecs: &[Codec],
     ) -> Option<String> {
         for round in 0..self.config.speed.refinement_rounds() {
-            let mut points =
-                self.plan_refinement(&report.candidates, best.as_ref(), request.policy, round);
+            let mut points = self.plan_refinement(
+                &report.candidates,
+                best.as_ref(),
+                request.policy,
+                round,
+                codecs,
+            );
             // Next to a point that broke the monotonic assumption the bracket
             // cannot be trusted, so its neighbours are probed too.
-            for codec in [Codec::Jpeg, Codec::Webp, Codec::Avif, Codec::Jxl] {
+            for &codec in codecs {
                 let Some((qualities, warning)) =
                     neighbour_probes(&report.candidates, codec, best.as_ref(), request.policy)
                 else {
@@ -43,81 +52,96 @@ impl Optimizer {
             if points.is_empty() {
                 break;
             }
-            let mut stop_reason = None;
-            if let Some(limit) = self.config.max_candidate_attempts {
-                let remaining = limit.saturating_sub(attempts(report));
-                if points.len() > remaining {
-                    points.truncate(remaining);
-                    stop_reason = Some(format!("candidate attempt budget of {limit} reached"));
-                }
-            }
-            let total = report.candidates.len() + points.len();
-            for chunk in points.chunks(request.parallelism.max(1)) {
-                if cancellation_requested() {
-                    return Some("cancelled".to_string());
-                }
-                if let Some(limit) = self.config.max_image_time
-                    && request.image_start.elapsed() >= limit
-                {
-                    return Some(format!("image wall-time budget of {:?} reached", limit));
-                }
-                let deadline = self
-                    .config
-                    .max_image_time
-                    .map(|limit| request.image_start + limit);
-                if let Err(ended) = self.wait_for_temp_room(deadline, request.waited) {
-                    return Some(wait_stop_reason(ended, self.config.max_image_time));
-                }
-                use rayon::prelude::*;
-                let first_index = report.candidates.len();
-                let current_best = best.as_ref();
-                let pool = self.pool().expect("run builds the worker pool");
-                let evaluated = pool.install(|| {
-                    chunk
-                        .par_iter()
-                        .enumerate()
-                        .map(|(offset, (codec, quality))| {
-                            self.score_candidate_report(
-                                CandidateEvaluationRequest {
-                                    input: request.input,
-                                    codec: *codec,
-                                    settings: EncoderSettings::Quality {
-                                        quality: *quality,
-                                        effort: self.config.speed.effort(*codec),
-                                    },
-                                    encoder_source: request.encoder_source,
-                                    original: request.original,
-                                    metadata: request.metadata,
-                                    prepared_original: request.prepared_original,
-                                    preprocess_ms: request.preprocess_ms,
-                                    gpu_preprocess_fallback_reason: request
-                                        .gpu_preprocess_fallback_reason,
-                                    has_alpha: request.has_alpha,
-                                    candidate_dir: request.candidate_dir,
-                                    policy: request.policy,
-                                    cache_source_hash: request.cache_source_hash,
-                                    external_metric_original: request.external_metric_original,
-                                    candidate_index: first_index + offset,
-                                    progress_index: first_index + offset + 1,
-                                    progress_total: total,
-                                    peers: chunk.len(),
-                                    deadline,
-                                    waited: request.waited,
-                                },
-                                current_best,
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                });
-                for candidate in evaluated.into_iter().flatten() {
-                    record_candidate(request.policy, candidate, report, best);
-                }
-            }
-            if stop_reason.is_some() {
-                return stop_reason;
+            if let Some(reason) = self.run_points(&request, points, report, best, true) {
+                return Some(reason);
             }
         }
         None
+    }
+
+    /// Evaluates qualities at each format's final effort, in chunks whose
+    /// candidates run concurrently. A candidate no smaller than the best so far
+    /// is left unscored when `skip_dominated` is set. Returns why the search had
+    /// to stop, if it did.
+    pub(super) fn run_points(
+        &self,
+        request: &QualityRefinementRequest<'_>,
+        mut points: Vec<(Codec, u8)>,
+        report: &mut ImageReport,
+        best: &mut Option<AcceptedCandidate>,
+        skip_dominated: bool,
+    ) -> Option<String> {
+        let mut stop_reason = None;
+        if let Some(limit) = self.config.max_candidate_attempts {
+            let remaining = limit.saturating_sub(attempts(report));
+            if points.len() > remaining {
+                points.truncate(remaining);
+                stop_reason = Some(format!("candidate attempt budget of {limit} reached"));
+            }
+        }
+        let total = report.candidates.len() + points.len();
+        for chunk in points.chunks(request.parallelism.max(1)) {
+            if cancellation_requested() {
+                return Some("cancelled".to_string());
+            }
+            if let Some(limit) = self.config.max_image_time
+                && request.image_start.elapsed() >= limit
+            {
+                return Some(format!("image wall-time budget of {:?} reached", limit));
+            }
+            let deadline = self
+                .config
+                .max_image_time
+                .map(|limit| request.image_start + limit);
+            if let Err(ended) = self.wait_for_temp_room(deadline, request.waited) {
+                return Some(wait_stop_reason(ended, self.config.max_image_time));
+            }
+            use rayon::prelude::*;
+            let first_index = report.candidates.len();
+            let current_best = best.as_ref().filter(|_| skip_dominated);
+            let pool = self.pool().expect("run builds the worker pool");
+            let evaluated = pool.install(|| {
+                chunk
+                    .par_iter()
+                    .enumerate()
+                    .map(|(offset, (codec, quality))| {
+                        self.score_candidate_report(
+                            CandidateEvaluationRequest {
+                                input: request.input,
+                                codec: *codec,
+                                settings: EncoderSettings::Quality {
+                                    quality: *quality,
+                                    effort: self.config.speed.effort(*codec),
+                                },
+                                encoder_source: request.encoder_source,
+                                original: request.original,
+                                metadata: request.metadata,
+                                prepared_original: request.prepared_original,
+                                preprocess_ms: request.preprocess_ms,
+                                gpu_preprocess_fallback_reason: request
+                                    .gpu_preprocess_fallback_reason,
+                                has_alpha: request.has_alpha,
+                                candidate_dir: request.candidate_dir,
+                                policy: request.policy,
+                                cache_source_hash: request.cache_source_hash,
+                                external_metric_original: request.external_metric_original,
+                                candidate_index: first_index + offset,
+                                progress_index: first_index + offset + 1,
+                                progress_total: total,
+                                peers: chunk.len(),
+                                deadline,
+                                waited: request.waited,
+                            },
+                            current_best,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            });
+            for candidate in evaluated.into_iter().flatten() {
+                record_candidate(request.policy, candidate, report, best);
+            }
+        }
+        stop_reason
     }
 
     /// Picks the qualities one refinement round should try: for each format
@@ -128,11 +152,12 @@ impl Optimizer {
         best: Option<&AcceptedCandidate>,
         policy: &DecisionPolicy,
         round: usize,
+        codecs: &[Codec],
     ) -> Vec<(Codec, u8)> {
         let offsets = self.config.speed.refinement_offsets(round);
         let floor = policy.min_quality - self.config.quality_slack;
         let mut plans = Vec::new();
-        for codec in [Codec::Jpeg, Codec::Webp, Codec::Avif, Codec::Jxl] {
+        for &codec in codecs {
             if !self.config.formats.contains(codec) || !self.backend.tools().available_for(codec) {
                 continue;
             }
@@ -395,7 +420,7 @@ pub(super) fn inversions(candidates: &[CandidateReport], codec: Codec) -> Vec<In
     found
 }
 
-fn describe_inversions(codec: Codec, inversions: &[Inversion]) -> String {
+pub(super) fn describe_inversions(codec: Codec, inversions: &[Inversion]) -> String {
     let details = inversions
         .iter()
         .map(Inversion::describe)

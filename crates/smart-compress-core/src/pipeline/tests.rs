@@ -18,6 +18,7 @@ use super::*;
 use super::{
     evaluate::encode_failure,
     plan::{lossless_gate, stage_plan},
+    predict::{Outcome, Step, Track, predicted_quality, readings},
     score::{RemoveOnDrop, bounded_metric_image, write_metric_png},
     search::{
         Inversion, InversionKind, coarse_followup, held_back_to_run, inversions, neighbour_probes,
@@ -33,6 +34,7 @@ use crate::{
         ReportFormat, TargetPolicy,
     },
     decision::{AcceptedCandidate, DecisionPolicy},
+    image_probe::{ContentClass, ImageProbe},
     progress::{NoopProgress, ProgressObserver},
     report::{ImageOutcome, ImageReport},
     scoring::{GpuWgpuBackend, gpu_or_skip},
@@ -2204,4 +2206,339 @@ fn the_source_size_comes_from_the_header_not_a_decode() {
         optimizer.source_pixels(&junk, u64::MAX),
         optimizer.config.max_pixels
     );
+}
+
+/// A candidate that scored `score` at `quality`, against the floor of 80.
+fn scored(codec: Codec, quality: u8, score: f32) -> CandidateReport {
+    let status = if score >= 80.0 {
+        CandidateStatus::Accepted
+    } else {
+        CandidateStatus::Rejected(format!("quality {score:.1} below 80.0"))
+    };
+    let mut candidate = lossy(codec, quality, 1_000 + 20 * u64::from(quality), status);
+    candidate.quality = Some(QualityScore {
+        overall: score,
+        ..QualityScore::lossless()
+    });
+    candidate
+}
+
+/// Runs the predicted search of one format against a curve, as the search of
+/// an image would: the start, then every round it asks for. Returns the
+/// rounds (the start counts as one), the candidates evaluated and the lowest
+/// passing quality.
+fn converge(codec: Codec, start: u8, score: impl Fn(u8) -> f32) -> (usize, usize, Option<u8>) {
+    let policy = smallest_policy();
+    let mut candidates = vec![scored(codec, start, score(start))];
+    let mut track = Track::new(codec);
+    let mut rounds = 1;
+    loop {
+        match track.step(&candidates, 80.0, 92, None, &policy) {
+            Step::Probe { qualities, .. } => {
+                rounds += 1;
+                assert!(rounds < 12, "the search does not close");
+                candidates.extend(qualities.into_iter().map(|q| scored(codec, q, score(q))));
+            }
+            Step::Done => break,
+            Step::Fallback(reason) => panic!("handed back: {reason}"),
+        }
+    }
+    let lowest = readings(&candidates, codec)
+        .into_iter()
+        .find(|reading| reading.outcome == Outcome::Passed)
+        .map(|reading| reading.quality);
+    (rounds, candidates.len(), lowest)
+}
+
+#[test]
+fn the_predicted_start_rises_with_the_target_and_stays_within_the_grid() {
+    for codec in [Codec::Jpeg, Codec::Webp, Codec::Avif, Codec::Jxl] {
+        let starts = [70.0, 80.0, 90.0].map(|target| predicted_quality(codec, target, 92));
+        assert!(
+            starts[0] < starts[1] && starts[1] < starts[2],
+            "{codec:?}: {starts:?}"
+        );
+        assert_eq!(predicted_quality(codec, 500.0, 92), 92);
+        assert_eq!(predicted_quality(codec, -500.0, 92), 1);
+    }
+}
+
+#[test]
+fn a_monotone_curve_closes_in_few_rounds_whatever_the_start() {
+    // The score reaches the floor of 80 at q50 and not at q49.
+    let curve = |quality: u8| 80.0 + 0.7 * (f32::from(quality) - 50.0);
+    // A start on the crossing needs one round, of three qualities, to show q49 failing.
+    assert_eq!(converge(Codec::Webp, 50, curve), (2, 4, Some(50)));
+    // A start a few steps off needs the window and at most a second look.
+    for start in [44, 47, 53, 58] {
+        let (rounds, _, lowest) = converge(Codec::Webp, start, curve);
+        assert_eq!(lowest, Some(50), "start q{start}");
+        assert!(rounds <= 5, "start q{start}: {rounds} rounds");
+    }
+    // Far off: the range widens or the window moves, and the answer is the same.
+    for start in [30, 70] {
+        assert_eq!(
+            converge(Codec::Webp, start, curve).2,
+            Some(50),
+            "start q{start}"
+        );
+    }
+}
+
+#[test]
+fn a_floor_above_the_grid_is_settled_by_probing_its_top() {
+    // The score never gets near 80, whatever the quality.
+    let (rounds, _, lowest) = converge(Codec::Avif, 60, |quality| 60.0 + 0.2 * f32::from(quality));
+    assert_eq!(lowest, None);
+    assert!(rounds <= 4, "{rounds} rounds");
+}
+
+#[test]
+fn the_error_range_is_sized_by_the_start_error_and_widens_when_the_crossing_is_outside() {
+    let policy = smallest_policy();
+    let mut track = Track::new(Codec::Jpeg);
+    // q60 scored 74: six points short of 80.
+    let mut candidates = vec![scored(Codec::Jpeg, 60, 74.0)];
+    let Step::Probe { qualities, .. } = track.step(&candidates, 80.0, 92, None, &policy) else {
+        panic!("a failing start asks for higher qualities");
+    };
+    assert!(qualities.iter().all(|quality| *quality > 60));
+    let range = track.range().unwrap();
+    assert_eq!(range.half_width, 18);
+    assert!(range.centre > 60.0);
+
+    // The next point rose so slowly that the crossing is far beyond the range.
+    candidates.push(scored(Codec::Jpeg, 70, 74.51));
+    let Step::Probe { qualities, .. } = track.step(&candidates, 80.0, 92, None, &policy) else {
+        panic!("a first widening still probes");
+    };
+    assert_eq!(track.range().unwrap().half_width, 36);
+    assert_eq!(qualities, vec![90, 91, 92]);
+    assert!(matches!(
+        track.step(&candidates, 80.0, 92, None, &policy),
+        Step::Probe { .. }
+    ));
+    assert_eq!(track.range().unwrap().half_width, 72);
+    // A third widening gives the prediction up.
+    let Step::Fallback(reason) = track.step(&candidates, 80.0, 92, None, &policy) else {
+        panic!("three widenings are too many");
+    };
+    assert!(reason.contains("far from the predicted start"), "{reason}");
+}
+
+#[test]
+fn a_format_that_does_not_fit_the_prediction_is_handed_to_the_staged_search() {
+    let policy = smallest_policy();
+    let step = |candidates: &[CandidateReport]| {
+        Track::new(Codec::Jpeg).step(candidates, 80.0, 92, None, &policy)
+    };
+    let reason = |step: Step| match step {
+        Step::Fallback(reason) => reason,
+        other => panic!("{other:?}"),
+    };
+
+    // q60 passes although q61 fails: the inversion the staged search guards against.
+    let inverted = [scored(Codec::Jpeg, 60, 82.0), scored(Codec::Jpeg, 61, 78.0)];
+    assert!(
+        reason(step(&inverted))
+            .contains("non-monotonic behaviour detected for jpeg: q60 passes while q61 fails")
+    );
+    // One in a format that cannot beat the best is not worth the staged search.
+    let best = best_of(Codec::Avif, 10);
+    assert!(matches!(
+        Track::new(Codec::Jpeg).step(&inverted, 80.0, 92, Some(&best), &policy),
+        Step::Done
+    ));
+    // The score does not move with quality.
+    let flat = [scored(Codec::Jpeg, 60, 74.0), scored(Codec::Jpeg, 70, 74.0)];
+    assert!(reason(step(&flat)).contains("does not rise"));
+    // The start missed by more than any estimate should.
+    assert!(reason(step(&[scored(Codec::Jpeg, 60, 40.0)])).contains("first probe"));
+    // A candidate failed to run.
+    let mut broken = scored(Codec::Jpeg, 60, 74.0);
+    broken.status = CandidateStatus::Failed("encoder crashed".to_string());
+    assert!(reason(step(&[broken])).contains("failed before it could be judged"));
+    // Nothing was judged at all.
+    assert!(reason(step(&[])).contains("no quality was judged"));
+}
+
+#[test]
+fn a_format_that_cannot_beat_the_best_is_dropped_by_the_size_of_its_failing_quality() {
+    let policy = smallest_policy();
+    // q60 failed at 2,200 bytes and q80 would be larger still.
+    let candidates = [scored(Codec::Jpeg, 60, 74.0)];
+    let best = best_of(Codec::Avif, 1_000);
+    assert!(matches!(
+        Track::new(Codec::Jpeg).step(&candidates, 80.0, 92, Some(&best), &policy),
+        Step::Done
+    ));
+    let best = best_of(Codec::Avif, 5_000);
+    assert!(matches!(
+        Track::new(Codec::Jpeg).step(&candidates, 80.0, 92, Some(&best), &policy),
+        Step::Probe { .. }
+    ));
+}
+
+#[test]
+fn a_quality_too_large_to_be_scored_limits_what_is_probed_below_it() {
+    let policy = smallest_policy();
+    let oversize = |quality: u8| {
+        lossy(
+            Codec::Jpeg,
+            quality,
+            20_000,
+            CandidateStatus::Rejected("not smaller than original".to_string()),
+        )
+    };
+    let step = |candidates: &[CandidateReport]| {
+        Track::new(Codec::Jpeg).step(candidates, 80.0, 92, None, &policy)
+    };
+    // q70 is larger than the original, so nothing from q70 up can win: the
+    // crossing, estimated far above, is looked for under it.
+    let Step::Probe { qualities, .. } = step(&[scored(Codec::Jpeg, 65, 72.0), oversize(70)]) else {
+        panic!("qualities between q65 and q70 are untried");
+    };
+    assert_eq!(qualities, vec![67, 68, 69]);
+    // With q69 failing too, nothing is left under it.
+    let measured = [
+        scored(Codec::Jpeg, 65, 72.0),
+        scored(Codec::Jpeg, 69, 74.0),
+        oversize(70),
+    ];
+    assert_eq!(step(&measured), Step::Done);
+}
+
+#[test]
+fn the_predicted_search_applies_only_where_its_start_was_fitted() {
+    if !ToolInventory::detect().ssimulacra2.enabled {
+        // Says what is missing, or fails when the tools are required.
+        let _ = smart_compress_codecs::tools_or_skip(&["ssimulacra2"]);
+        return;
+    }
+    let optimizer = |adjust: fn(&mut CliConfig)| {
+        let mut config = CliConfig {
+            search: crate::SearchMode::Predicted,
+            gpu: cpu_only(),
+            ..CliConfig::default()
+        };
+        adjust(&mut config);
+        Optimizer::new(config)
+    };
+    let photo = |width: u32, height: u32| ImageProbe {
+        path: String::new(),
+        format: None,
+        width,
+        height,
+        pixels: u64::from(width) * u64::from(height),
+        color_type: "Rgb8".to_string(),
+        original_color_type: "Rgb8".to_string(),
+        has_alpha: false,
+        metadata_size: 0,
+        icc_profile_size: None,
+        unique_color_ratio: 0.1,
+        edge_density: 0.1,
+        flat_region_ratio: 0.1,
+        alpha_coverage: 0.0,
+        orientation_applied: false,
+        content_class: ContentClass::Photo,
+    };
+    assert!(optimizer(|_| {}).searches_predicted(4, &photo(64, 64)));
+    for adjust in [
+        |config: &mut CliConfig| config.search = crate::SearchMode::Staged,
+        |config: &mut CliConfig| config.speed = crate::SpeedPreset::Fast,
+        |config: &mut CliConfig| config.verbose = true,
+        |config: &mut CliConfig| config.metrics.primary = PrimaryMetric::Builtin,
+    ] {
+        assert!(!optimizer(adjust).searches_predicted(4, &photo(64, 64)));
+    }
+    // One candidate at a time, an image ssimulacra2 cannot score, or a graphic.
+    let predicted = optimizer(|_| {});
+    assert!(!predicted.searches_predicted(1, &photo(64, 64)));
+    assert!(!predicted.searches_predicted(4, &photo(4, 64)));
+    let screenshot = ImageProbe {
+        content_class: ContentClass::Screenshot,
+        ..photo(64, 64)
+    };
+    assert!(!predicted.searches_predicted(4, &screenshot));
+}
+
+#[test]
+fn the_predicted_search_starts_from_one_quality_and_ends_beside_a_failing_one() {
+    let Some(_) = smart_compress_codecs::tools_or_skip(&["ssimulacra2"]) else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    // Large and textured enough to be classified as a photograph.
+    let source = dir.path().join("source.jpg");
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let mut noise = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state % 24) as u32
+    };
+    RgbImage::from_fn(192, 192, |x, y| {
+        Rgb([
+            (x + noise()) as u8,
+            (y + noise()) as u8,
+            ((x + y) / 2 + noise()) as u8,
+        ])
+    })
+    .save(&source)
+    .unwrap();
+    let run = |label: &str, search: crate::SearchMode| {
+        let mut summary = Optimizer::new(CliConfig {
+            inputs: vec![source.clone()],
+            out_dir: Some(dir.path().join(label)),
+            formats: CodecSelection::new([Codec::Jpeg]),
+            search,
+            allow_larger: true,
+            min_quality: Some(60.0),
+            workers: 4,
+            gpu: cpu_only(),
+            ..CliConfig::default()
+        })
+        .run()
+        .unwrap();
+        assert_eq!(summary.report.failures, 0);
+        summary.report.reports.remove(0)
+    };
+    // (quality, passed) of every quality that was scored.
+    let judged = |report: &ImageReport| {
+        report
+            .candidates
+            .iter()
+            .filter_map(|candidate| match candidate.settings {
+                EncoderSettings::Quality { quality, .. } if candidate.quality.is_some() => Some((
+                    quality,
+                    matches!(candidate.status, CandidateStatus::Accepted),
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let lowest_passing = |judged: &[(u8, bool)]| {
+        judged
+            .iter()
+            .filter(|(_, passed)| *passed)
+            .map(|(quality, _)| *quality)
+            .min()
+            .unwrap()
+    };
+    let staged = run("staged", crate::SearchMode::Staged);
+    let predicted = run("predicted", crate::SearchMode::Predicted);
+
+    let tried = judged(&predicted);
+    let ends_at = lowest_passing(&tried);
+    assert!(tried.contains(&(ends_at - 1, false)), "{tried:?}");
+    assert!(ends_at <= lowest_passing(&judged(&staged)));
+    assert_eq!(
+        predicted.candidates[0].settings,
+        EncoderSettings::Quality {
+            quality: predicted_quality(Codec::Jpeg, 60.0, 92),
+            effort: 0
+        }
+    );
+    let size = |report: &ImageReport| report.candidates[report.winner_index.unwrap()].size_bytes;
+    assert!(size(&predicted) <= size(&staged));
 }

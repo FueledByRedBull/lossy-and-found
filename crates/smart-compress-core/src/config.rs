@@ -86,6 +86,18 @@ pub enum ReportFormat {
     Markdown,
 }
 
+/// How the quality floor is searched for within each lossy format.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SearchMode {
+    /// A coarse grid of qualities, then refinement rounds around the crossing.
+    #[default]
+    Staged,
+    /// A start predicted from the target score and the image, then rounds
+    /// inside the range its measured error allows.
+    Predicted,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SpeedPreset {
@@ -260,6 +272,7 @@ pub struct CliConfig {
     pub metadata: MetadataPolicy,
     pub alpha: AlphaPolicy,
     pub speed: SpeedPreset,
+    pub search: SearchMode,
     pub candidate_timeout: Option<Duration>,
     pub max_image_time: Option<Duration>,
     pub max_candidate_attempts: Option<usize>,
@@ -309,6 +322,7 @@ impl Default for CliConfig {
             metadata: MetadataPolicy::Safe,
             alpha: AlphaPolicy::Preserve,
             speed: SpeedPreset::Balanced,
+            search: SearchMode::default(),
             candidate_timeout: None,
             max_image_time: None,
             max_candidate_attempts: None,
@@ -487,6 +501,7 @@ pub struct FileDefaults {
     pub alpha: Option<String>,
     pub background: Option<String>,
     pub speed: Option<SpeedPreset>,
+    pub search: Option<SearchMode>,
     pub overwrite: Option<bool>,
     /// `keep_original` is the earlier name.
     #[serde(alias = "keep_original")]

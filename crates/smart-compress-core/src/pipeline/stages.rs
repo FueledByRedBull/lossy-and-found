@@ -12,7 +12,7 @@ use super::{
     evaluate::record_candidate,
     guards::{TempUsageGuard, directory_bytes},
     plan::{is_lossless_probe, lossless_gate, stage_plan},
-    search::{attempts, coarse_followup, held_back_to_run},
+    search::{LOSSY, attempts, coarse_followup, held_back_to_run},
     wait_stop_reason,
 };
 use crate::{
@@ -23,6 +23,7 @@ use crate::{
 };
 
 /// What the search of one image reads, fixed once its inputs are prepared.
+#[derive(Clone, Copy)]
 pub(super) struct SearchContext<'a> {
     pub(super) input: &'a Path,
     pub(super) image_start: Instant,
@@ -31,6 +32,8 @@ pub(super) struct SearchContext<'a> {
     pub(super) parallelism: usize,
     pub(super) concurrency: usize,
     pub(super) gated: bool,
+    /// The formats start at a predicted quality instead of a coarse grid.
+    pub(super) predicted: bool,
     pub(super) candidate_total: usize,
     pub(super) pool: &'a rayon::ThreadPool,
     pub(super) encoder_source: &'a Path,
@@ -78,7 +81,7 @@ impl<'a> SearchContext<'a> {
         }
     }
 
-    fn refinement_request(&self) -> QualityRefinementRequest<'a> {
+    pub(super) fn refinement_request(&self) -> QualityRefinementRequest<'a> {
         QualityRefinementRequest {
             input: self.input,
             parallelism: self.concurrency,
@@ -146,7 +149,8 @@ impl Optimizer {
         }
         // With candidates running in parallel the coarse grid is staged: the middle
         // quality of every lossy format first, then only the side of it the quality
-        // floor must lie on. Verbose mode keeps the whole grid in one stage.
+        // floor must lie on. Verbose mode keeps the whole grid in one stage. The
+        // predicted search plans one quality per format, which is its first stage.
         let staged = if ctx.parallelism > 1 && !self.config.verbose {
             stage_plan(candidate_plan, ctx.gated)
         } else {
@@ -158,15 +162,18 @@ impl Optimizer {
         };
         let mut search_stop_reason = self.run_staged(ctx, staged, report, &mut best, temp_usage);
         if search_stop_reason.is_none() {
-            search_stop_reason =
-                self.refine_quality_search(ctx.refinement_request(), report, &mut best);
+            search_stop_reason = if ctx.predicted {
+                self.refine_predicted(ctx, report, &mut best, temp_usage)
+            } else {
+                self.refine_quality_search(ctx.refinement_request(), report, &mut best, &LOSSY)
+            };
         }
         search_stop_reason
     }
 
     /// Runs the first stage, then the held-back candidates that the first
     /// stage's results leave worth running.
-    fn run_staged(
+    pub(super) fn run_staged(
         &self,
         ctx: &SearchContext<'_>,
         staged: StagedPlan,

@@ -220,7 +220,13 @@ impl Optimizer {
             return report;
         }
 
-        let Some((candidate_plan, gated)) = self.plan_search(input, &mut report) else {
+        let predicted = report
+            .probe
+            .as_ref()
+            .is_some_and(|probe| self.searches_predicted(parallelism, probe));
+        let predicted_target = predicted.then_some(source.min_quality - self.config.quality_slack);
+        let Some((candidate_plan, gated)) = self.plan_search(input, predicted_target, &mut report)
+        else {
             return report;
         };
         let Some(mut workspace) = self.prepare_workspace(
@@ -252,6 +258,7 @@ impl Optimizer {
             parallelism,
             concurrency,
             gated,
+            predicted,
             candidate_total,
             pool: self.pool().expect("run builds the worker pool"),
             encoder_source: encoder_source(&workspace.normalized, &workspace.absolute_input),
@@ -558,13 +565,14 @@ impl Optimizer {
     fn plan_search(
         &self,
         input: &Path,
+        predicted_target: Option<f32>,
         report: &mut ImageReport,
     ) -> Option<(Vec<(Codec, EncoderSettings)>, bool)> {
         let probe = report
             .probe
             .as_ref()
             .expect("probe set after successful decode");
-        let candidate_plan = self.plan_candidates(probe);
+        let candidate_plan = self.plan_candidates(probe, predicted_target);
         let gated = !self.config.verbose && lossless_gate_applies(probe, &candidate_plan);
         if candidate_plan.is_empty() {
             report.errors.push(format!(

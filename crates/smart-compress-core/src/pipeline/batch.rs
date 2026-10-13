@@ -15,7 +15,7 @@ use smart_compress_codecs::cancellation_requested;
 use super::{BatchSummary, Optimizer, count_failures, inputs::input_identity, unix_time_ms};
 use crate::{
     atomic_file::atomic_write,
-    config::CliConfig,
+    config::{CliConfig, SearchMode},
     report::{
         ImageOutcome, ImageReport, METRIC_COLOR_SPACE, REPORT_SCHEMA_VERSION, ReportOutput,
         RunManifest, RunStatus,
@@ -283,8 +283,14 @@ impl Optimizer {
 }
 
 pub(super) fn stable_config_text(config: &CliConfig) -> String {
+    // Left out for the staged search, so that the fingerprints of reports
+    // written before the option existed still match.
+    let search = match config.search {
+        SearchMode::Staged => "",
+        SearchMode::Predicted => ";search=Predicted",
+    };
     format!(
-        "preset={:?};target={:?};formats={:?};report={:?};min_quality={:?};quality_slack={};metadata={:?};alpha={:?};speed={:?};candidate_timeout={:?};max_image_time={:?};max_candidate_attempts={:?};max_temp_bytes={:?};max_run_temp_bytes={:?};max_memory_bytes={:?};workers={};parallelism={:?};allow_larger={};dry_run={};out_dir={:?};out={:?};overwrite={};protect_inputs={};max_input_bytes={};max_pixels={};max_width={};max_height={};max_decoded_bytes={};max_metadata_bytes={};max_bits_per_pixel={};gpu={:?};cache={:?};metrics={:?};verbose={};inputs={:?}",
+        "preset={:?};target={:?};formats={:?};report={:?};min_quality={:?};quality_slack={};metadata={:?};alpha={:?};speed={:?};candidate_timeout={:?};max_image_time={:?};max_candidate_attempts={:?};max_temp_bytes={:?};max_run_temp_bytes={:?};max_memory_bytes={:?};workers={};parallelism={:?};allow_larger={};dry_run={};out_dir={:?};out={:?};overwrite={};protect_inputs={};max_input_bytes={};max_pixels={};max_width={};max_height={};max_decoded_bytes={};max_metadata_bytes={};max_bits_per_pixel={};gpu={:?};cache={:?};metrics={:?};verbose={};inputs={:?}{search}",
         config.preset,
         config.target,
         config.formats.iter().collect::<Vec<_>>(),

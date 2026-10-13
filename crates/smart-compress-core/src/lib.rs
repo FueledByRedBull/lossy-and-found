@@ -13,8 +13,8 @@ pub mod report;
 pub mod scoring;
 
 pub use config::{
-    AlphaPolicy, CliConfig, CodecSelection, MetadataPolicy, Preset, ReportFormat, SpeedPreset,
-    TargetPolicy,
+    AlphaPolicy, CliConfig, CodecSelection, MetadataPolicy, Preset, ReportFormat, SearchMode,
+    SpeedPreset, TargetPolicy,
 };
 pub use pipeline::{BatchSummary, Optimizer};
 pub use progress::{NoopProgress, ProgressObserver};

@@ -2,16 +2,22 @@ use std::collections::HashMap;
 
 use smart_compress_codecs::{Codec, EncoderSettings};
 
-use super::{Optimizer, StagedPlan, codec_name};
+use super::{Optimizer, StagedPlan, codec_name, predict::predicted_quality};
 use crate::{
     candidate::CandidateReport,
-    config::AlphaPolicy,
+    config::{AlphaPolicy, SpeedPreset},
     decision::{AcceptedCandidate, DecisionPolicy},
     image_probe::ImageProbe,
 };
 
 impl Optimizer {
-    pub(super) fn plan_candidates(&self, probe: &ImageProbe) -> Vec<(Codec, EncoderSettings)> {
+    /// `predicted` is the target score when the predicted search runs: each lossy
+    /// format then gets one quality, at its final effort, in place of the grid.
+    pub(super) fn plan_candidates(
+        &self,
+        probe: &ImageProbe,
+        predicted: Option<f32>,
+    ) -> Vec<(Codec, EncoderSettings)> {
         let mut plan = Vec::new();
         let speed = self.config.speed;
         let large_lossy_source = probe.pixels > 50_000_000
@@ -53,28 +59,16 @@ impl Optimizer {
                     }
                 }
                 Codec::Jpeg => {
-                    for quality in speed.qualities() {
-                        plan.push((
-                            codec,
-                            EncoderSettings::Quality {
-                                quality: *quality,
-                                effort: speed.probe_effort(codec),
-                            },
-                        ));
+                    for settings in lossy_settings(speed, codec, predicted) {
+                        plan.push((codec, settings));
                     }
                 }
                 Codec::Webp | Codec::Avif | Codec::Jxl => {
                     if !large_lossy_source {
                         plan.push((codec, EncoderSettings::Lossless));
                     }
-                    for quality in speed.qualities() {
-                        plan.push((
-                            codec,
-                            EncoderSettings::Quality {
-                                quality: *quality,
-                                effort: speed.probe_effort(codec),
-                            },
-                        ));
+                    for settings in lossy_settings(speed, codec, predicted) {
+                        plan.push((codec, settings));
                     }
                 }
             }
@@ -107,6 +101,29 @@ impl Optimizer {
             })
             .collect::<Vec<_>>()
             .join("; ")
+    }
+}
+
+/// The lossy settings planned for a format: the coarse grid, or the one quality
+/// the predicted search starts from.
+fn lossy_settings(
+    speed: SpeedPreset,
+    codec: Codec,
+    predicted: Option<f32>,
+) -> Vec<EncoderSettings> {
+    match predicted {
+        Some(target) => vec![EncoderSettings::Quality {
+            quality: predicted_quality(codec, target, speed.qualities()[0]),
+            effort: speed.effort(codec),
+        }],
+        None => speed
+            .qualities()
+            .iter()
+            .map(|quality| EncoderSettings::Quality {
+                quality: *quality,
+                effort: speed.probe_effort(codec),
+            })
+            .collect(),
     }
 }
 

@@ -153,6 +153,7 @@ command line overrides the same setting in a
 | `--ssimulacra2` | off | The same as `--metric ssimulacra2`: an image fails if the `ssimulacra2` tool is missing. |
 | `--butteraugli` | off | Also require a Butteraugli distance (the `butteraugli_main` tool) to pass. Over a minute per candidate on a large photo. |
 | `--speed fast\|balanced\|exhaustive` | `balanced` | How many settings are tried per format; see [How the search works](#how-the-search-works). |
+| `--search staged\|predicted` | `staged` | Experimental. `predicted` starts each lossy format at a quality estimated from the quality floor, then searches the range that the start's measured error allows, in fewer rounds than the coarse grid of `staged`. It applies to photographs, with `--speed balanced` or `exhaustive`, SSIMULACRA2 scoring and candidates evaluated in parallel; any other image, and a format whose measurements do not fit the estimate, is searched as `staged`. |
 | `--allow-larger[=BOOL]` | false | Accept an output larger than the original. |
 
 ### Formats
@@ -758,6 +759,7 @@ metadata = "safe"            # keep | safe | strip
 alpha = "preserve"           # preserve | flatten | auto
 background = "#ffffff"       # used only when alpha = "flatten"
 speed = "balanced"           # fast | balanced | exhaustive
+search = "staged"            # staged | predicted (experimental)
 overwrite = false            # true replaces existing outputs
 protect_inputs = true
 # out_dir = "optimized"
