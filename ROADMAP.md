@@ -29,12 +29,29 @@ reason that is measured:
 - Single-image latency misses its gates at a 7-core cap for 3.8 MP (11.8 s
   against 10 s) and 12 MP (about 32 s against 30 s). Encoding and the external
   SSIMULACRA2 process are the remaining costs.
+- The predicted search (`--search predicted`) is faster at the balanced preset
+  (a 12 MP photo in 20 to 29 s against 28 to 38 s) but slower at strict and
+  aggressive, so it is opt-in. Before it can be the default: probe the ceiling
+  alone when the estimate lies above it, widen the first round at floor 70,
+  and test it with the cache, resume, budgets, images over 16 MP and
+  transparency. Its starting qualities were fitted on re-encoded stock JPEGs
+  only.
+- In-process SSIMULACRA2 scoring (`--metric ssimulacra2-inprocess`) is opt-in
+  until its differences of up to 1.2 points from the tool on synthetic
+  ICC-profile and checkerboard images are explained. It is untested with the
+  GPU scoring options. Open question: whether `auto` should use it instead of
+  the built-in score when the tool is missing.
+- With both, encoding is 35 to 55% of the per-candidate time and scoring 30 to
+  50%; a photo still needs two to three rounds.
 - Hardware AV1 encoding (for example AMF or NVENC through ffmpeg) has not been
   evaluated, so its speed and size against the software encoder are unmeasured.
   No hardware encoder is used.
 
 ### Quality of results
 
+- AVIF coarse probes run at a faster encoder effort than the final encode, so
+  a winner can be a file made at the probe effort, and the staged search
+  sometimes stops one or two quality steps above a quality that passes.
 - An opt-in mode that scrubs the colour hidden under fully transparent pixels.
   Today that colour is ignored by the built-in score but still reaches the
   encoders unchanged, so it can cost bytes.

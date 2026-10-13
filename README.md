@@ -134,6 +134,8 @@ and the other measurements are in [docs/benchmarking.md](docs/benchmarking.md).
 
 ## The desktop app
 
+![The control panel before any image is added](docs/panel.png)
+
 Double-click `gui.cmd` (it builds first if the program is missing) or
 `target\release\smart-compress-app.exe`. It opens a window with a page that is
 compiled into the executable and served on `127.0.0.1` only, behind a per-session

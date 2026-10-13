@@ -232,6 +232,34 @@ Balanced preset, SSIMULACRA2 deciding (floor 80), `--target smallest`, default f
 
 The batch took 121 s of wall time. It is not comparable with the 142 s at seven workers in the scheduling table above, which used a different build and core count. The photos are already lossy JPEGs, which limits the gain: at the strict preset (floor 90) no candidate is smaller than the source for any of them.
 
+The four smaller, low-detail photos, same settings, run in one batch with the six:
+
+| Photo | Original | Winner | Size | Score | Smaller by |
+|---|---:|---|---:|---:|---:|
+| picsum-31, 1.7 MP, greyscale | 78,994 | AVIF q61 | 44,820 | 80.6 | 43.3% |
+| picsum-44, 1.7 MP, fog | 98,932 | AVIF q63 | 66,907 | 80.4 | 32.4% |
+| picsum-63, 1.7 MP, studio | 41,441 | AVIF q55 | 18,001 | 80.1 | 56.6% |
+| picsum-72, 1.7 MP, greyscale | 223,291 | JPEG XL q65 | 111,655 | 80.1 | 50.0% |
+| All ten | 8,036,175 | | 6,182,011 | | 23.1% |
+
+## Experimental modes: predicted search and in-process scoring
+
+`--search predicted` and `--metric ssimulacra2-inprocess` are off by default. Balanced preset, `--workers 6`, pinned to six cores, cache off. Batch and single-photo times are medians of three after a discarded cold run, except the last column and the 30-photo row, which are single runs. "Staged" is the default search with the external `ssimulacra2` tool.
+
+| Run | Staged | Predicted | Predicted, in-process scoring |
+|---|---:|---:|---:|
+| picsum-1015 (12 MP), `smallest` | 37.8 s | 24.3 s | 22.2 s |
+| picsum-1015 (12 MP), `web` | 29.3 s | 19.8 s | 18.6 s |
+| picsum-1025 (12 MP), `smallest` | 35.2 s | 29.3 s | 27.7 s |
+| picsum-1025 (12 MP), `web` | 27.6 s | 25.9 s | 24.9 s |
+| Ten sample photos, `smallest` | 131.8 s | 117.3 s | 105.9 s |
+| Ten sample photos, `web` | 101.9 s | 86.5 s | 80.0 s |
+| 30 other stock photos, `smallest` | 209.3 s | 195.5 s | - |
+
+Predicted search, balanced: rounds per photo fell from about 5 to 2.5 to 3. Over 186 image comparisons no output was larger than the staged one and a few were smaller (the largest, picsum-1043: AVIF q61 2,098,214 to q59 2,047,293 bytes). It is not the default because it is slower on the other presets: on the ten photos by 44 to 60% at strict, where the floor is often out of reach and the staged search settles that with one probe, and by 21 to 47% at aggressive, where the starting estimate is furthest off. One synthetic image came out 1.4% larger at strict. The starting qualities were fitted on the ten sample photos, all re-encoded stock JPEGs; other sources are untested, as are the cache, resume, budgets, images over 16 MP and photos with transparency in this mode.
+
+In-process scoring against the external tool: scoring one candidate took 643 ms against 3,033 ms at 12 MP and 180 ms against 968 ms at 3.8 MP (six threads; the external figure includes writing its input file), and preparing the original once per image took 421 ms at 12 MP. Whole runs were 4 to 23% faster and the peak working set of a single 12 MP photo fell from 5.6 GB to 3.5 GB. On 545 candidates from real runs the two scores differed by 0.013 points on average and 0.315 at most, no accept or reject verdict differed and every winner was the same file. On 855 synthetic degradations the largest difference was 1.2 points (ICC-profile and checkerboard images at 2048 px), which is unexplained and is why `auto` does not use it.
+
 ## Other findings
 
 - **Scoring metric.** The built-in score, twice the PSNR over the colour channels combined with the same measure on an edge map, is not perceptual. Against SSIMULACRA2 on two phone photos (not in the repository) it ranked codecs inconsistently: the same SSIMULACRA2 score, 19 points apart on the built-in scale. Its old floor of 90 forced near-lossless output (88% of the original size). SSIMULACRA2 is now the deciding score when its program is present, with floors of 90, 80 and 70; one of those photos lands at 33% of its original size at floor 80.

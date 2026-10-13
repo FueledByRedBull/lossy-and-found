@@ -31,6 +31,7 @@
 *.gif
 !/tests/fixtures/*
 !/samples/photos/*
+!/docs/panel.png
 
 # The default output folder of the program, wherever it was run. It comes
 # after the exceptions above so that it also holds inside them.
